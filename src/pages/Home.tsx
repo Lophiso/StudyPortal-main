@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, BookOpen, Briefcase, Scale, FlaskConical, GraduationCap, Globe } from 'lucide-react';
+import { Search, BookOpen, Briefcase, Scale, FlaskConical, GraduationCap, Globe, Heart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { Program } from '../lib/database.types';
 import Navbar from '../components/Navbar';
+import { useAuth } from '../lib/auth';
 
 export default function Home() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bookmarkedProgramIds, setBookmarkedProgramIds] = useState<number[]>([]);
+  const [bookmarkBusyId, setBookmarkBusyId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchPrograms = async () => {
@@ -42,6 +46,29 @@ export default function Home() {
     void fetchPrograms();
   }, []);
 
+  useEffect(() => {
+    const fetchBookmarks = async () => {
+      if (!user) {
+        setBookmarkedProgramIds([]);
+        return;
+      }
+
+      const { data, error: bookmarksError } = await supabase
+        .from('bookmarks')
+        .select('program_id')
+        .eq('user_id', user.id);
+
+      if (bookmarksError) {
+        console.error('Error fetching bookmarks:', bookmarksError);
+        return;
+      }
+
+      setBookmarkedProgramIds((data ?? []).map((b) => b.program_id));
+    };
+
+    void fetchBookmarks();
+  }, [user]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const params = new URLSearchParams();
@@ -59,6 +86,44 @@ export default function Home() {
     { name: 'Arts & Humanities', icon: Globe, color: 'bg-yellow-500' },
     { name: 'Medicine', icon: GraduationCap, color: 'bg-pink-500' },
   ];
+
+  const toggleBookmark = async (programId: number) => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
+    setBookmarkBusyId(programId);
+
+    const isBookmarked = bookmarkedProgramIds.includes(programId);
+
+    try {
+      if (isBookmarked) {
+        const { error: deleteError } = await supabase
+          .from('bookmarks')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('program_id', programId);
+
+        if (deleteError) throw deleteError;
+
+        setBookmarkedProgramIds((prev) => prev.filter((id) => id !== programId));
+      } else {
+        const { error: insertError } = await supabase.from('bookmarks').insert({
+          user_id: user.id,
+          program_id: programId,
+        });
+
+        if (insertError) throw insertError;
+
+        setBookmarkedProgramIds((prev) => [...prev, programId]);
+      }
+    } catch (bookmarkError) {
+      console.error('Error updating bookmark:', bookmarkError);
+    } finally {
+      setBookmarkBusyId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -190,7 +255,28 @@ export default function Home() {
                   className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 p-6 cursor-pointer"
                   onClick={() => navigate(`/program/${program.id}`)}
                 >
-                  <h3 className="text-xl font-semibold text-[#002147] mb-1">{program.title}</h3>
+                  <div className="flex items-start justify-between mb-1">
+                    <h3 className="text-xl font-semibold text-[#002147] mr-2 line-clamp-2">{program.title}</h3>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void toggleBookmark(program.id);
+                      }}
+                      disabled={bookmarkBusyId === program.id}
+                      className="ml-2 text-[#FF9900] hover:text-[#e68a00] disabled:opacity-60"
+                      aria-label={
+                        bookmarkedProgramIds.includes(program.id)
+                          ? 'Remove bookmark'
+                          : 'Save program'
+                      }
+                    >
+                      <Heart
+                        className="h-5 w-5"
+                        fill={bookmarkedProgramIds.includes(program.id) ? '#FF9900' : 'none'}
+                      />
+                    </button>
+                  </div>
                   <p className="text-gray-600 mb-2">{program.university}</p>
                   <p className="text-gray-500 text-sm mb-3">
                     {program.country}  b7 {program.study_level}
