@@ -10,6 +10,7 @@ export default function ProgramDetail() {
   const navigate = useNavigate();
   const [program, setProgram] = useState<Program | null>(null);
   const [loading, setLoading] = useState(true);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProgram();
@@ -41,6 +42,17 @@ export default function ProgramDetail() {
       GBP: '£',
     };
     return `${symbols[currency] || currency} ${amount.toLocaleString()}`;
+  };
+
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setShareMessage('Link copied to clipboard');
+      setTimeout(() => setShareMessage(null), 2000);
+    } catch {
+      setShareMessage('Unable to copy link');
+      setTimeout(() => setShareMessage(null), 2000);
+    }
   };
 
   if (loading) {
@@ -213,6 +225,18 @@ export default function ProgramDetail() {
               <button className="w-full border-2 border-[#002147] text-[#002147] hover:bg-[#002147] hover:text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 mb-6">
                 Request Information
               </button>
+
+              <button
+                type="button"
+                onClick={handleShare}
+                className="w-full border border-gray-300 text-[#002147] hover:bg-gray-100 font-semibold py-3 px-6 rounded-lg transition-colors duration-200 mb-2"
+              >
+                Share Program
+              </button>
+
+              {shareMessage && (
+                <p className="text-xs text-gray-600 text-center mt-1">{shareMessage}</p>
+              )}
 
               <div className="border-t pt-6">
                 <h3 className="font-semibold text-[#002147] mb-4">Program Details</h3>

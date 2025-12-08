@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Program } from '../lib/database.types';
-import { MapPin, DollarSign, Clock, Search } from 'lucide-react';
+import { MapPin, DollarSign, Clock, Search, Heart } from 'lucide-react';
 import Navbar from '../components/Navbar';
+import { useAuth } from '../lib/auth';
 
 export default function SearchResults() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [filteredPrograms, setFilteredPrograms] = useState<Program[]>([]);
@@ -16,6 +18,8 @@ export default function SearchResults() {
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [maxTuition, setMaxTuition] = useState<number>(100000);
   const [selectedLevel, setSelectedLevel] = useState<string>('');
+  const [bookmarkedProgramIds, setBookmarkedProgramIds] = useState<number[]>([]);
+  const [bookmarkBusyId, setBookmarkBusyId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchPrograms();
@@ -24,6 +28,29 @@ export default function SearchResults() {
   useEffect(() => {
     applyFilters();
   }, [programs, selectedCountries, maxTuition, selectedLevel, searchParams]);
+
+  useEffect(() => {
+    const fetchBookmarks = async () => {
+      if (!user) {
+        setBookmarkedProgramIds([]);
+        return;
+      }
+
+      const { data, error: bookmarksError } = await supabase
+        .from('bookmarks')
+        .select('program_id')
+        .eq('user_id', user.id);
+
+      if (bookmarksError) {
+        console.error('Error fetching bookmarks:', bookmarksError);
+        return;
+      }
+
+      setBookmarkedProgramIds((data ?? []).map((b) => b.program_id));
+    };
+
+    void fetchBookmarks();
+  }, [user]);
 
   const fetchPrograms = async () => {
     try {
@@ -92,6 +119,44 @@ export default function SearchResults() {
       GBP: '£',
     };
     return `${symbols[currency] || currency} ${amount.toLocaleString()}`;
+  };
+
+  const toggleBookmark = async (programId: number) => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
+    setBookmarkBusyId(programId);
+
+    const isBookmarked = bookmarkedProgramIds.includes(programId);
+
+    try {
+      if (isBookmarked) {
+        const { error: deleteError } = await supabase
+          .from('bookmarks')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('program_id', programId);
+
+        if (deleteError) throw deleteError;
+
+        setBookmarkedProgramIds((prev) => prev.filter((id) => id !== programId));
+      } else {
+        const { error: insertError } = await supabase.from('bookmarks').insert({
+          user_id: user.id,
+          program_id: programId,
+        });
+
+        if (insertError) throw insertError;
+
+        setBookmarkedProgramIds((prev) => [...prev, programId]);
+      }
+    } catch (bookmarkError) {
+      console.error('Error updating bookmark:', bookmarkError);
+    } finally {
+      setBookmarkBusyId(null);
+    }
   };
 
   if (loading) {
@@ -211,9 +276,30 @@ export default function SearchResults() {
                         <span className="inline-block px-3 py-1 text-xs font-semibold text-white bg-[#002147] rounded-full">
                           {program.study_level}
                         </span>
-                        <span className="text-[#FF9900] font-bold text-lg">
-                          {formatCurrency(program.tuition_fee, program.currency)}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[#FF9900] font-bold text-lg">
+                            {formatCurrency(program.tuition_fee, program.currency)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void toggleBookmark(program.id);
+                            }}
+                            disabled={bookmarkBusyId === program.id}
+                            className="text-[#FF9900] hover:text-[#e68a00] disabled:opacity-60"
+                            aria-label={
+                              bookmarkedProgramIds.includes(program.id)
+                                ? 'Remove bookmark'
+                                : 'Save program'
+                            }
+                          >
+                            <Heart
+                              className="h-5 w-5"
+                              fill={bookmarkedProgramIds.includes(program.id) ? '#FF9900' : 'none'}
+                            />
+                          </button>
+                        </div>
                       </div>
 
                       <h3 className="text-xl font-bold text-[#002147] mb-2 line-clamp-2">
