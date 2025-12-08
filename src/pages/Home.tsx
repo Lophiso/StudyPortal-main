@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, BookOpen, Briefcase, Scale, FlaskConical, GraduationCap, Globe } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { Program } from '../lib/database.types';
+import Navbar from '../components/Navbar';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -61,23 +62,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <nav className="bg-[#002147] text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <GraduationCap className="h-8 w-8 text-[#FF9900]" />
-              <span className="text-2xl font-bold">StudyPortal</span>
-            </div>
-            <div className="hidden md:flex space-x-6">
-              <a href="#" className="hover:text-[#FF9900] transition-colors">Programs</a>
-              <a href="#" className="hover:text-[#FF9900] transition-colors">Universities</a>
-              <a href="#" className="hover:text-[#FF9900] transition-colors">About</a>
-              <a href="#" className="hover:text-[#FF9900] transition-colors">Contact</a>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       {/* Hero Section */}
       <div

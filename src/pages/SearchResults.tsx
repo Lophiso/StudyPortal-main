@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Program } from '../lib/database.types';
-import { MapPin, DollarSign, Clock, GraduationCap, Search } from 'lucide-react';
+import { MapPin, DollarSign, Clock, Search } from 'lucide-react';
+import Navbar from '../components/Navbar';
 
 export default function SearchResults() {
   const [searchParams] = useSearchParams();
@@ -103,20 +104,7 @@ export default function SearchResults() {
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
-      {/* Navigation */}
-      <nav className="bg-[#002147] text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div
-              className="flex items-center space-x-2 cursor-pointer"
-              onClick={() => navigate('/')}
-            >
-              <GraduationCap className="h-8 w-8 text-[#FF9900]" />
-              <span className="text-2xl font-bold">StudyPortal</span>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
