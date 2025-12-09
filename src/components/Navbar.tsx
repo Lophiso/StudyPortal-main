@@ -34,6 +34,9 @@ export default function Navbar() {
             <Link to="/universities" className="hover:text-[#FF9900] transition-colors">
               Universities
             </Link>
+            <Link to="/jobs" className="hover:text-[#FF9900] transition-colors">
+              PhD &amp; Jobs
+            </Link>
             <Link to="/about" className="hover:text-[#FF9900] transition-colors">
               About
             </Link>
