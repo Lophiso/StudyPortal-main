@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
-import { fetchJobsViaPuppeteer } from '../lib/services/freeJobFetcher';
-import { analyzeJobWithGemini } from '../lib/services/geminiProcessor';
+import { fetchJobsViaPuppeteer } from '../lib/services/freeJobFetcher.js';
+import { analyzeJobWithGemini } from '../lib/services/geminiProcessor.js';
 
 const prisma = new PrismaClient();
 
