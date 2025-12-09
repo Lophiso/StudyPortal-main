@@ -3,6 +3,9 @@ import italyCourses from '../data/italy-courses.json';
 interface ItalyCourse {
   courseName: string;
   universityName: string;
+  degreeType: string;
+  duration: string;
+  language: string;
   link: string | null;
 }
 
@@ -34,8 +37,26 @@ export default function ItalyCourseList() {
                 {course.courseName}
               </h3>
               {course.universityName && (
-                <p className="text-sm text-gray-700 mb-2">{course.universityName}</p>
+                <p className="text-sm text-gray-700 mb-1">{course.universityName}</p>
               )}
+
+              <div className="text-xs text-gray-600 space-y-1 mt-2">
+                {course.degreeType && (
+                  <p>
+                    <span className="font-medium">Degree type:</span> {course.degreeType}
+                  </p>
+                )}
+                {course.duration && (
+                  <p>
+                    <span className="font-medium">Duration:</span> {course.duration}
+                  </p>
+                )}
+                {course.language && (
+                  <p>
+                    <span className="font-medium">Language:</span> {course.language}
+                  </p>
+                )}
+              </div>
             </div>
 
             {course.link && (
