@@ -29,11 +29,8 @@ jobs:
       - name: Install Puppeteer
         run: npm install --save-dev puppeteer
 
-      - name: Compile Universitaly scraper (TypeScript)
-        run: npx tsc scripts/scrape-universitaly.ts --module ESNext --target ES2020 --outDir scripts/dist
-
       - name: Run Italy scraper
-        run: node scripts/dist/scrape-universitaly.js
+        run: node scripts/scrape-universitaly.js
 
       - name: Commit updated italy-courses.json
         env:
