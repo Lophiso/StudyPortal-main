@@ -112,76 +112,26 @@ async function scrapePageCourses(page) {
 
     const data = [];
 
-    // Primary strategy: known card containers
-    const cardNodeList = document.querySelectorAll(
-      '.results-list .result-item, .elenco-corsi .corso, .search-results .result-item, article, .card'
+    // Simple, robust strategy: treat every link whose href contains "corsi"
+    // as a course entry. This is less structured but guarantees data when
+    // diagnostics show corsiLinks > 0.
+    const linkNodes = Array.from(
+      document.querySelectorAll('a[href*="corsi"]')
     );
-    const cards = Array.from(cardNodeList);
 
-    for (const card of cards) {
-      const titleEl =
-        card.querySelector('h3, h2, .course-title, .titolo-corso') ||
-        card.querySelector('a');
-
-      const uniEl =
-        card.querySelector('.university, .ateneo, .provider, .nome-ateneo') ||
-        card.querySelector('p');
-
-      const metaText = card.innerText || '';
-
-      let degreeType = '';
-      if (/Triennale/i.test(metaText)) degreeType = 'Bachelor (Triennale)';
-      else if (/Magistrale/i.test(metaText)) degreeType = 'Master (Magistrale)';
-
-      let duration = '';
-      const durationMatch = metaText.match(/(\d+)\s*(year|years|anno|anni)/i);
-      if (durationMatch) {
-        duration = durationMatch[0];
-      }
-
-      let language = '';
-      if (/\bEN\b|English/i.test(metaText)) language = 'English';
-      else if (/\bIT\b|Italian/i.test(metaText)) language = 'Italian';
-
-      const linkEl =
-        card.querySelector('a[href*="/corsi/"], a[href*="cerca-corsi"], a[href]');
-
-      const courseName = titleEl ? titleEl.textContent.trim() : '';
-      const universityName = uniEl ? uniEl.textContent.trim() : '';
-      const href = linkEl ? linkEl.getAttribute('href') : null;
-
-      if (!courseName || !href) continue;
+    for (const a of linkNodes) {
+      const text = (a.textContent || '').trim();
+      const href = a.getAttribute('href');
+      if (!text || !href) continue;
 
       data.push({
-        courseName,
-        universityName,
-        degreeType,
-        duration,
-        language,
+        courseName: text,
+        universityName: '',
+        degreeType: '',
+        duration: '',
+        language: '',
         link: normalizeUrl(href),
       });
-    }
-
-    // Fallback: if nothing matched, try all course links in the document
-    if (!data.length) {
-      const linkNodes = Array.from(
-        document.querySelectorAll('a[href*="/corsi/"]')
-      );
-
-      for (const a of linkNodes) {
-        const text = (a.textContent || '').trim();
-        const href = a.getAttribute('href');
-        if (!text || !href) continue;
-
-        data.push({
-          courseName: text,
-          universityName: '',
-          degreeType: '',
-          duration: '',
-          language: '',
-          link: normalizeUrl(href),
-        });
-      }
     }
 
     return data;
