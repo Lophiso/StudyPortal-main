@@ -94,6 +94,53 @@ export type Database = {
           created_at?: string;
         };
       };
+      JobOpportunity: {
+        Row: {
+          id: string;
+          createdAt: string;
+          updatedAt: string;
+          title: string;
+          company: string;
+          location: string | null;
+          postedAt: string | null;
+          link: string;
+          rawText: string;
+          isPhD: boolean;
+          fundingType: string;
+          deadline: string | null;
+          tags: string[];
+        };
+        Insert: {
+          id?: string;
+          createdAt?: string;
+          updatedAt?: string;
+          title: string;
+          company: string;
+          location?: string | null;
+          postedAt?: string | null;
+          link: string;
+          rawText: string;
+          isPhD?: boolean;
+          fundingType?: string;
+          deadline?: string | null;
+          tags?: string[];
+        };
+        Update: {
+          id?: string;
+          createdAt?: string;
+          updatedAt?: string;
+          title?: string;
+          company?: string;
+          location?: string | null;
+          postedAt?: string | null;
+          link?: string;
+          rawText?: string;
+          isPhD?: boolean;
+          fundingType?: string;
+          deadline?: string | null;
+          tags?: string[];
+        };
+      };
     };
   };
 };
@@ -101,3 +148,4 @@ export type Database = {
 export type Program = Database['public']['Tables']['programs']['Row'];
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type Bookmark = Database['public']['Tables']['bookmarks']['Row'];
+export type JobOpportunity = Database['public']['Tables']['JobOpportunity']['Row'];
