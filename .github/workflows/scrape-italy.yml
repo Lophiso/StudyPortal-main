@@ -30,7 +30,7 @@ jobs:
         run: npm install --save-dev puppeteer
 
       - name: Compile Universitaly scraper (TypeScript)
-        run: npx tsc scripts/scrape-universitaly.ts --module commonjs --target ES2020 --outDir scripts/dist
+        run: npx tsc scripts/scrape-universitaly.ts --module ESNext --target ES2020 --outDir scripts/dist
 
       - name: Run Italy scraper
         run: node scripts/dist/scrape-universitaly.js
