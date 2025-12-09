@@ -9,7 +9,10 @@ import puppeteer from 'puppeteer';
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
 async function scrape() {
-  const browser = await puppeteer.launch({ headless: 'new' });
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
   const page = await browser.newPage();
 
   const baseUrl = 'https://www.universitaly.it';
