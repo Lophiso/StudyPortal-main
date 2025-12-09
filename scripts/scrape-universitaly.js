@@ -30,6 +30,33 @@ async function openCourseSearch(page) {
       waitUntil: 'networkidle2',
     });
   }
+
+  // Give the page a moment to finish any client-side setup
+  await page.waitForTimeout(2000);
+
+  // Try to trigger the search explicitly by clicking a primary search button
+  try {
+    const searchButtonSelectors = [
+      'button[type="submit"]',
+      'button.btn-primary',
+      'button.button',
+      'button[title*="Search" i]',
+    ];
+
+    for (const sel of searchButtonSelectors) {
+      const btn = await page.$(sel).catch(() => null);
+      if (btn) {
+        console.log('Clicking search button selector:', sel);
+        await Promise.all([
+          page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {}),
+          btn.click(),
+        ]);
+        break;
+      }
+    }
+  } catch (err) {
+    console.warn('Error while trying to trigger search:', err && err.message ? err.message : err);
+  }
 }
 
 async function applyEnglishFilter(page) {
@@ -49,16 +76,8 @@ async function applyEnglishFilter(page) {
 }
 
 async function scrapePageCourses(page) {
-  const containerSelectors = ['.results-list', '.elenco-corsi', '.search-results', 'main'];
-
-  for (const sel of containerSelectors) {
-    try {
-      await page.waitForSelector(sel, { timeout: 10000 });
-      break;
-    } catch {
-      // try next
-    }
-  }
+  // Give the page a chance to render results
+  await page.waitForTimeout(2000);
 
   const courses = await page.evaluate(() => {
     const baseUrl = window.location.origin;
@@ -70,13 +89,13 @@ async function scrapePageCourses(page) {
       return baseUrl + href;
     };
 
-    const cards = Array.from(
-      document.querySelectorAll(
-        '.results-list .result-item, .elenco-corsi .corso, .search-results .result-item, article, .card'
-      )
-    );
-
     const data = [];
+
+    // Primary strategy: known card containers
+    const cardNodeList = document.querySelectorAll(
+      '.results-list .result-item, .elenco-corsi .corso, .search-results .result-item, article, .card'
+    );
+    const cards = Array.from(cardNodeList);
 
     for (const card of cards) {
       const titleEl =
@@ -120,6 +139,28 @@ async function scrapePageCourses(page) {
         language,
         link: normalizeUrl(href),
       });
+    }
+
+    // Fallback: if nothing matched, try all course links in the document
+    if (!data.length) {
+      const linkNodes = Array.from(
+        document.querySelectorAll('a[href*="/corsi/"]')
+      );
+
+      for (const a of linkNodes) {
+        const text = (a.textContent || '').trim();
+        const href = a.getAttribute('href');
+        if (!text || !href) continue;
+
+        data.push({
+          courseName: text,
+          universityName: '',
+          degreeType: '',
+          duration: '',
+          language: '',
+          link: normalizeUrl(href),
+        });
+      }
     }
 
     return data;
