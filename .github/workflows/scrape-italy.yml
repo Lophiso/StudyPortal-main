@@ -36,6 +36,8 @@ jobs:
         run: node scripts/dist/scrape-universitaly.js
 
       - name: Commit updated italy-courses.json
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
           if git diff --quiet src/data/italy-courses.json; then
             echo "No changes in italy-courses.json"
@@ -44,6 +46,10 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add src/data/italy-courses.json package-lock.json package.json || git add src/data/italy-courses.json
-          git commit -m "chore: update Italy courses data"
-          git push
+          git commit -m "chore: update Italy courses data" || echo "Nothing to commit"
+
+          # Rebase on top of latest remote branch to avoid non-fast-forward errors
+          git pull --rebase origin "$BRANCH_NAME" || echo "Rebase failed or not needed"
+          git push origin HEAD:"$BRANCH_NAME"
