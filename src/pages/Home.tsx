@@ -72,6 +72,11 @@ export default function Home() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (selectedCountry === 'Italy') {
+      navigate('/italy-courses');
+      return;
+    }
+
     const params = new URLSearchParams();
     if (searchQuery) params.set('q', searchQuery);
     if (selectedCountry) params.set('country', selectedCountry);
@@ -173,6 +178,7 @@ export default function Home() {
                   <option value="United States">United States</option>
                   <option value="United Kingdom">United Kingdom</option>
                   <option value="Germany">Germany</option>
+                  <option value="Italy">Italy</option>
                 </select>
               </div>
 

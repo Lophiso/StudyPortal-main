@@ -7,6 +7,7 @@ import ProfilePage from './pages/Profile';
 import Universities from './pages/Universities';
 import About from './pages/About';
 import Contact from './pages/Contact';
+import ItalyCoursesPage from './pages/ItalyCourses';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="/universities" element={<Universities />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/italy-courses" element={<ItalyCoursesPage />} />
       </Routes>
     </BrowserRouter>
   );
