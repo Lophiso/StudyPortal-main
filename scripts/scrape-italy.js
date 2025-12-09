@@ -1,9 +1,12 @@
 // Scrapes course data from Universitaly and saves it to src/data/italy-courses.json
 // Usage: node scripts/scrape-italy.js
 
-const fs = require('fs');
-const path = require('path');
-const puppeteer = require('puppeteer');
+import fs from 'fs';
+import path from 'path';
+import puppeteer from 'puppeteer';
+
+// __dirname replacement for ES modules
+const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
 async function scrape() {
   const browser = await puppeteer.launch({ headless: 'new' });
