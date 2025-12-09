@@ -1,6 +1,7 @@
-import fs from 'fs';
-import path from 'path';
-import puppeteer, { Browser, Page } from 'puppeteer';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as puppeteer from 'puppeteer';
+import type { Browser, Page } from 'puppeteer';
 
 interface ItalyCourse {
   courseName: string;
@@ -15,11 +16,7 @@ async function goToEnglishHome(page: Page) {
   await page.goto('https://www.universitaly.it/', { waitUntil: 'networkidle2' });
 
   // Try to click ENG / English toggle in the header
-  const langSelectors = [
-    'a[lang="en"]',
-    'button[lang="en"]',
-    'a:contains("ENG")',
-  ];
+  const langSelectors = ['a[lang="en"]', 'button[lang="en"]'];
 
   for (const selector of langSelectors) {
     try {
@@ -67,11 +64,16 @@ async function openCourseSearch(page: Page) {
 async function applyEnglishFilter(page: Page) {
   // Best‑effort: look for a filter block with text "Course language" then a checkbox with label containing "English"
   try {
-    // Try clicking the English language checkbox directly by label text
-    const labelXPath = "//label[contains(translate(normalize-space(.), 'english', 'ENGLISH'), 'ENGLISH')]";
-    const [label] = await page.$x(labelXPath);
-    if (label) {
-      await (label as any).click();
+    // Best-effort: find any label element whose text includes "English"
+    const labelHandle = await page.evaluateHandle(() => {
+      const labels = Array.from(document.querySelectorAll('label')) as HTMLLabelElement[];
+      return (
+        labels.find((l) => /english/i.test(l.textContent || '')) || null
+      );
+    });
+
+    if (labelHandle) {
+      await (labelHandle as any).click();
       await page.waitForNetworkIdle({ idleTime: 1000, timeout: 10000 }).catch(() => {});
     }
   } catch {
@@ -97,7 +99,7 @@ async function scrapePageCourses(page: Page): Promise<ItalyCourse[]> {
     }
   }
 
-  const courses = await page.evaluate<ItalyCourse[]>(() => {
+  const courses = (await page.evaluate(() => {
     const baseUrl = window.location.origin;
 
     const normalizeUrl = (href: string | null) => {
@@ -113,7 +115,7 @@ async function scrapePageCourses(page: Page): Promise<ItalyCourse[]> {
       )
     );
 
-    const data: ItalyCourse[] = [];
+    const data: any[] = [];
 
     for (const card of cards as HTMLElement[]) {
       const titleEl =
@@ -161,7 +163,7 @@ async function scrapePageCourses(page: Page): Promise<ItalyCourse[]> {
     }
 
     return data;
-  });
+  })) as ItalyCourse[];
 
   return courses;
 }
@@ -217,8 +219,8 @@ async function paginateAndScrape(page: Page, maxPages = 5): Promise<ItalyCourse[
 }
 
 async function main() {
-  const browser: Browser = await puppeteer.launch({
-    headless: 'new',
+  const browser: Browser = await (puppeteer as any).launch({
+    headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
 
