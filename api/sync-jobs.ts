@@ -1,10 +1,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import prismaPkg from '@prisma/client';
-const { PrismaClient } = prismaPkg;
+import { createClient } from '@supabase/supabase-js';
 import { fetchJobsViaPuppeteer } from '../lib/services/freeJobFetcher.js';
 import { analyzeJobWithGemini } from '../lib/services/geminiProcessor.js';
 
-const prisma = new PrismaClient();
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Supabase env vars VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set');
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -23,41 +29,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ? new Date(analysis.deadline)
           : null;
 
-      const existing = await prisma.jobOpportunity.findUnique({
-        where: { link: job.link },
-        select: { id: true },
-      });
+      // Check if a record with this link already exists
+      const { data: existingRows, error: existingError } = await supabase
+        .from('JobOpportunity')
+        .select('id')
+        .eq('link', job.link)
+        .limit(1);
 
-      const upserted = await prisma.jobOpportunity.upsert({
-        where: { link: job.link },
-        create: {
-          title: job.title,
-          company: job.company,
-          location: job.location ?? undefined,
-          postedAt: job.postedAt ?? undefined,
-          link: job.link,
-          rawText: job.rawText,
-          isPhD: analysis.isPhD,
-          fundingType: analysis.fundingType,
-          deadline: deadlineDate ?? undefined,
-          tags: analysis.tags,
-        },
-        update: {
-          title: job.title,
-          company: job.company,
-          location: job.location ?? undefined,
-          postedAt: job.postedAt ?? undefined,
-          rawText: job.rawText,
-          isPhD: analysis.isPhD,
-          fundingType: analysis.fundingType,
-          deadline: deadlineDate ?? undefined,
-          tags: analysis.tags,
-        },
-      });
+      if (existingError) {
+        throw existingError;
+      }
+
+      const payload = {
+        title: job.title,
+        company: job.company,
+        location: job.location ?? null,
+        postedAt: job.postedAt ?? null,
+        link: job.link,
+        rawText: job.rawText,
+        isPhD: analysis.isPhD,
+        fundingType: analysis.fundingType,
+        deadline: deadlineDate,
+        tags: analysis.tags,
+      };
+
+      const { data: upsertedRows, error: upsertError } = await supabase
+        .from('JobOpportunity')
+        .upsert(payload, { onConflict: 'link' })
+        .select('link');
+
+      if (upsertError) {
+        throw upsertError;
+      }
+
+      const upsertedLink = upsertedRows && upsertedRows[0]?.link ? upsertedRows[0].link : job.link;
 
       results.push({
-        link: upserted.link,
-        status: existing ? 'updated' : 'created',
+        link: upsertedLink,
+        status: existingRows && existingRows.length > 0 ? 'updated' : 'created',
       });
     }
 
@@ -65,7 +74,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error: any) {
     console.error('sync-jobs error', error);
     return res.status(500).json({ error: error?.message ?? 'Unknown error' });
-  } finally {
-    await prisma.$disconnect();
   }
 }
