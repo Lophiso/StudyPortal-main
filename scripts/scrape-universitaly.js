@@ -23,19 +23,8 @@ async function goToEnglishHome(page) {
 }
 
 async function openCourseSearch(page) {
-  const findButtonCandidates = ['a[href*="cerca-corsi"]', 'a.btn-primary', 'a.button'];
-
-  for (const selector of findButtonCandidates) {
-    const el = await page.$(selector).catch(() => null);
-    if (el) {
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {}),
-        el.click(),
-      ]);
-      break;
-    }
-  }
-
+  // In headless CI, clickable areas can be tricky; going directly to the
+  // search route is more reliable than trying to click the homepage button.
   if (!page.url().includes('cerca-corsi')) {
     await page.goto('https://www.universitaly.it/cerca-corsi', {
       waitUntil: 'networkidle2',
