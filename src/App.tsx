@@ -9,6 +9,7 @@ import About from './pages/About';
 import Contact from './pages/Contact';
 import ItalyCoursesPage from './pages/ItalyCourses';
 import Jobs from './pages/Jobs';
+import PhdPositions from './pages/PhdPositions';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/italy-courses" element={<ItalyCoursesPage />} />
+        <Route path="/phd" element={<PhdPositions />} />
         <Route path="/jobs" element={<Jobs />} />
       </Routes>
     </BrowserRouter>

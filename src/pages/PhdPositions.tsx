@@ -3,7 +3,7 @@ import Navbar from '../components/Navbar';
 import { supabase } from '../lib/supabase';
 import type { JobOpportunity } from '../lib/database.types';
 
-export default function Jobs() {
+export default function PhdPositions() {
   const [jobs, setJobs] = useState<JobOpportunity[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -12,18 +12,20 @@ export default function Jobs() {
     async function loadJobs() {
       setLoading(true);
       setError(null);
+
       const { data, error } = await supabase
         .from('JobOpportunity')
         .select('*')
-        .eq('type', 'JOB')
+        .eq('type', 'PHD')
         .order('postedAt', { ascending: false });
 
       if (error) {
-        console.error('Failed to load jobs', error);
-        setError('Failed to load opportunities. Please try again later.');
+        console.error('Failed to load PhD positions', error);
+        setError('Failed to load PhD positions. Please try again later.');
       } else {
         setJobs(data as JobOpportunity[]);
       }
+
       setLoading(false);
     }
 
@@ -35,25 +37,22 @@ export default function Jobs() {
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-10">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold text-[#002147] mb-2">Job & PhD Opportunities</h1>
+          <h1 className="text-3xl font-bold text-[#002147] mb-2">PhD Positions</h1>
           <p className="text-gray-600 max-w-2xl text-sm">
-            These opportunities are scraped from public job sources and enriched with AI
-            to highlight PhD roles, funding information, and useful tags.
+            Curated doctoral and PhD opportunities from leading universities and research
+            institutes. Each listing includes key details about location, deadline, and
+            how to apply.
           </p>
         </header>
 
-        {loading && (
-          <p className="text-gray-600 text-sm">Loading opportunities…</p>
-        )}
+        {loading && <p className="text-gray-600 text-sm">Loading PhD positions…</p>}
 
-        {error && (
-          <p className="text-sm text-red-600 mb-4">{error}</p>
-        )}
+        {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
 
         {!loading && !error && (!jobs || jobs.length === 0) && (
           <p className="text-gray-600 text-sm">
-            No industry jobs have been synced yet. The engine will populate this
-            list automatically after the next sync.
+            No PhD positions have been synced yet. The engine will populate this list
+            automatically after the next sync.
           </p>
         )}
 
@@ -75,26 +74,19 @@ export default function Jobs() {
 
                   <div className="text-xs text-gray-600 space-y-1 mt-2">
                     <p>
-                      <span className="font-medium">Type:</span> Industry job
+                      <span className="font-medium">Type:</span> PhD / Doctoral position
                     </p>
+                    {job.deadline && (
+                      <p>
+                        <span className="font-medium">Deadline:</span>{' '}
+                        {new Date(job.deadline).toLocaleDateString()}
+                      </p>
+                    )}
                     <p>
                       <span className="font-medium">Posted:</span>{' '}
                       {new Date(job.postedAt).toLocaleDateString()}
                     </p>
                   </div>
-
-                  {job.requirements && job.requirements.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-xs font-medium text-gray-700 mb-1">
-                        Key requirements:
-                      </p>
-                      <ul className="list-disc list-inside text-[11px] text-gray-600 space-y-0.5">
-                        {job.requirements.slice(0, 5).map((req, idx) => (
-                          <li key={idx}>{req}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                 </div>
 
                 <div className="mt-4 flex justify-between items-center">

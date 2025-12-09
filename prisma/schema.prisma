@@ -14,20 +14,24 @@ datasource db {
   provider = "postgresql"
 }
 
+enum JobType {
+  PHD
+  JOB
+}
+
 model JobOpportunity {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
 
-  title       String
-  company     String
-  location    String?
-  postedAt    String?
-  link        String   @unique
-  rawText     String   @db.Text
-
-  isPhD       Boolean  @default(false)
-  fundingType String   @default("Unknown")
-  deadline    DateTime?
-  tags        String[]
+  title          String
+  type           JobType
+  company        String
+  country        String
+  city           String
+  description    String   @db.Text
+  requirements   String[]
+  deadline       DateTime?
+  postedAt       DateTime
+  applicationLink String
+  source         String
 }
