@@ -81,6 +81,25 @@ async function scrapePageCourses(page) {
   // Give the page a chance to render results
   await delay(2000);
 
+  // Diagnostics: log some high-level DOM stats to understand structure in CI
+  try {
+    const { totalLinks, corsiLinks, cardCount } = await page.evaluate(() => {
+      const totalLinks = document.querySelectorAll('a').length;
+      const corsiLinks = document.querySelectorAll('a[href*="corsi"]').length;
+      const cardCount = document.querySelectorAll(
+        '.results-list .result-item, .elenco-corsi .corso, .search-results .result-item, article, .card'
+      ).length;
+
+      return { totalLinks, corsiLinks, cardCount };
+    });
+
+    console.log(
+      `Diagnostics: totalLinks=${totalLinks}, corsiLinks=${corsiLinks}, cardCandidates=${cardCount}`
+    );
+  } catch (err) {
+    console.warn('Diagnostics evaluate failed:', err && err.message ? err.message : err);
+  }
+
   const courses = await page.evaluate(() => {
     const baseUrl = window.location.origin;
 
