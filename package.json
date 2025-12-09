@@ -11,8 +11,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@prisma/client": "^7.1.0",
+    "@sparticuz/chromium": "^143.0.0",
     "@supabase/supabase-js": "^2.57.4",
+    "@vercel/node": "^5.5.15",
     "lucide-react": "^0.344.0",
+    "prisma": "^7.1.0",
+    "puppeteer-core": "^24.32.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.10.1"
