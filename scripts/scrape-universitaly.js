@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import puppeteer from 'puppeteer';
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function goToEnglishHome(page) {
   await page.goto('https://www.universitaly.it/', { waitUntil: 'networkidle2' });
 
@@ -32,7 +34,7 @@ async function openCourseSearch(page) {
   }
 
   // Give the page a moment to finish any client-side setup
-  await page.waitForTimeout(2000);
+  await delay(2000);
 
   // Try to trigger the search explicitly by clicking a primary search button
   try {
@@ -77,7 +79,7 @@ async function applyEnglishFilter(page) {
 
 async function scrapePageCourses(page) {
   // Give the page a chance to render results
-  await page.waitForTimeout(2000);
+  await delay(2000);
 
   const courses = await page.evaluate(() => {
     const baseUrl = window.location.origin;
