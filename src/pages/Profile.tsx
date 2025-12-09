@@ -3,12 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../lib/database.types';
-import { GraduationCap } from 'lucide-react';
+import Navbar from '../components/Navbar';
+
+type EditableProfileFields = Pick<
+  Profile,
+  'full_name' | 'bio' | 'education_level' | 'study_interests' | 'phone_number'
+>;
 
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { user, profile, loading } = useAuth();
-  const [form, setForm] = useState<Pick<Profile, 'full_name' | 'bio'>>({ full_name: '', bio: '' });
+  const [form, setForm] = useState<EditableProfileFields>({
+    full_name: '',
+    bio: '',
+    education_level: '',
+    study_interests: '',
+    phone_number: '',
+  });
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -20,11 +31,30 @@ export default function ProfilePage() {
   }, [loading, user, navigate]);
 
   useEffect(() => {
-    if (profile) {
-      setForm({ full_name: profile.full_name ?? '', bio: profile.bio ?? '' });
-      setAvatarUrl(profile.avatar_url ?? null);
-    }
-  }, [profile]);
+    if (!user) return;
+
+    // Prefer saved profile values, otherwise fall back to Google metadata where available
+    const metadata = (user.user_metadata || {}) as {
+      full_name?: string;
+      name?: string;
+      picture?: string;
+      avatar_url?: string;
+      phone?: string;
+    };
+
+    const googleName = profile?.full_name ?? metadata.full_name ?? metadata.name ?? '';
+    const googleAvatar = profile?.avatar_url ?? metadata.avatar_url ?? metadata.picture ?? null;
+
+    setForm({
+      full_name: googleName,
+      bio: profile?.bio ?? '',
+      education_level: profile?.education_level ?? '',
+      study_interests: profile?.study_interests ?? '',
+      phone_number: profile?.phone_number ?? metadata.phone ?? '',
+    });
+
+    setAvatarUrl(googleAvatar);
+  }, [profile, user]);
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -60,6 +90,9 @@ export default function ProfilePage() {
       id: user.id,
       full_name: form.full_name,
       bio: form.bio,
+      education_level: form.education_level || null,
+      study_interests: form.study_interests || null,
+      phone_number: form.phone_number || null,
       avatar_url: avatarUrl ?? undefined,
     };
 
@@ -84,20 +117,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
-      <nav className="bg-[#002147] text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              className="flex items-center space-x-2 cursor-pointer"
-              onClick={() => navigate('/')}
-            >
-              <GraduationCap className="h-8 w-8 text-[#FF9900]" />
-              <span className="text-2xl font-bold">StudyPortal</span>
-            </button>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <h1 className="text-3xl font-bold text-[#002147] mb-6">Your Profile</h1>
@@ -135,6 +155,38 @@ export default function ProfilePage() {
               type="text"
               value={form.full_name}
               onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#002147] focus:border-transparent outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Education level</label>
+            <input
+              type="text"
+              value={form.education_level ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, education_level: e.target.value }))}
+              placeholder="e.g. High School, Undergraduate, Graduate"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#002147] focus:border-transparent outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Study interests</label>
+            <textarea
+              value={form.study_interests ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, study_interests: e.target.value }))}
+              rows={3}
+              placeholder="What would you like to study?"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#002147] focus:border-transparent outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone number</label>
+            <input
+              type="tel"
+              value={form.phone_number ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, phone_number: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#002147] focus:border-transparent outline-none"
             />
           </div>
