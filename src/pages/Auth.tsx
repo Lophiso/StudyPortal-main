@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { GraduationCap } from 'lucide-react';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -127,6 +128,17 @@ export default function Auth() {
               {loading ? 'Please wait...' : mode === 'signin' ? 'Sign In' : 'Sign Up'}
             </button>
           </form>
+
+          <div className="mt-6">
+            <div className="flex items-center mb-4">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="px-3 text-xs uppercase tracking-wide text-gray-400">
+                or continue with
+              </span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+            <GoogleSignInButton />
+          </div>
         </div>
       </div>
     </div>

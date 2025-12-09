@@ -63,7 +63,8 @@ export default function Home() {
         return;
       }
 
-      setBookmarkedProgramIds((data ?? []).map((b) => b.program_id));
+      const rows = (data ?? []) as Array<{ program_id: number }>;
+      setBookmarkedProgramIds(rows.map((b) => b.program_id));
     };
 
     void fetchBookmarks();
@@ -109,10 +110,12 @@ export default function Home() {
 
         setBookmarkedProgramIds((prev) => prev.filter((id) => id !== programId));
       } else {
-        const { error: insertError } = await supabase.from('bookmarks').insert({
-          user_id: user.id,
-          program_id: programId,
-        });
+        const { error: insertError } = await (supabase as any)
+          .from('bookmarks')
+          .insert({
+            user_id: user.id,
+            program_id: programId,
+          });
 
         if (insertError) throw insertError;
 
