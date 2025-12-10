@@ -15,12 +15,38 @@ const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
 const rssParser = new Parser();
 
-const ACADEMIC_FEEDS = [
-  'https://thedutchphdcoach.com/feed/',
-  'https://phdlife.warwick.ac.uk/feed/',
-  'https://ahappyphd.org/posts/index.xml',
+// 1. Global PhD & Academic Aggregators (The "Big Three" + more)
+const GLOBAL_PHD_FEEDS = [
+  'https://www.findaphd.com/phds/rss.aspx',
+  'https://www.jobs.ac.uk/feeds/type-roles?role=PhDs',
+  'https://www.academicpositions.com/rss',
+  'https://www.timeshighereducation.com/unijobs/rss',
+  'https://www.higheredjobs.com/rss/categoryFeed.cfm?catID=68',
 ];
-const TECH_FEEDS = ['https://weworkremotely.com/categories/remote-programming-jobs.rss'];
+
+// 2. Science, Tech & Engineering Specific (High Value)
+const STEM_FEEDS = [
+  'https://spectrum.ieee.org/feeds/topic/careers',
+  'https://cacm.acm.org/feeds-2/',
+  'https://www.nature.com/naturecareers/feed/rss',
+  'https://jobs.sciencecareers.org/rss/jobs/',
+  'https://www.newscientistjobs.com/jobs/rss/',
+  'https://www.jobs.ac.uk/feeds/discipline/engineering',
+  'https://www.jobs.ac.uk/feeds/discipline/biosciences',
+];
+
+// 3. European & National Portals (Euraxess Network)
+const REGIONAL_FEEDS = [
+  'https://euraxess.ec.europa.eu/jobs/rss',
+  'https://www.euraxess.it/jobs/rss',
+  'https://www.euraxess.fr/jobs/rss',
+  'https://www.euraxess.de/jobs/rss',
+  'https://www.euraxess.es/jobs/rss',
+  'https://www.euraxess.nl/jobs/rss',
+];
+
+// 4. Industry / remote tech jobs (non-academic)
+const INDUSTRY_FEEDS = ['https://weworkremotely.com/categories/remote-programming-jobs.rss'];
 
 export type EngineJobType = 'PHD' | 'JOB';
 
@@ -39,17 +65,35 @@ interface GeminiEnriched {
   requirements: string[];
   deadline: string | null;
   isPhD: boolean;
+  language: string | null;
+  summaryEn: string | null;
 }
 
 export async function runRealtimeIngestion() {
   const feedItems: FeedItem[] = [];
+  // Smart batching: pick 1 from Global, 1 from STEM, 1 from Regional each run,
+  // plus our industry jobs feed. This keeps the function under time limits while
+  // still exploring a wide space of sources over multiple runs.
+  const pickRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
 
-  const feedConfigs: { url: string; inferredType: EngineJobType }[] = [
-    ...ACADEMIC_FEEDS.map((url) => ({ url, inferredType: 'PHD' as const })),
-    ...TECH_FEEDS.map((url) => ({ url, inferredType: 'JOB' as const })),
-  ];
+  const selectedFeeds: { url: string; inferredType: EngineJobType }[] = [];
 
-  for (const { url, inferredType } of feedConfigs) {
+  if (GLOBAL_PHD_FEEDS.length > 0) {
+    selectedFeeds.push({ url: pickRandom(GLOBAL_PHD_FEEDS), inferredType: 'PHD' });
+  }
+  if (STEM_FEEDS.length > 0) {
+    selectedFeeds.push({ url: pickRandom(STEM_FEEDS), inferredType: 'PHD' });
+  }
+  if (REGIONAL_FEEDS.length > 0) {
+    selectedFeeds.push({ url: pickRandom(REGIONAL_FEEDS), inferredType: 'PHD' });
+  }
+
+  // Always include at least one industry/tech feed for non-academic jobs
+  for (const url of INDUSTRY_FEEDS) {
+    selectedFeeds.push({ url, inferredType: 'JOB' });
+  }
+
+  for (const { url, inferredType } of selectedFeeds) {
     try {
       const feed = await rssParser.parseURL(url);
       for (const item of feed.items ?? []) {
@@ -129,6 +173,8 @@ export async function runRealtimeIngestion() {
                 type: SchemaType.ARRAY,
                 items: { type: SchemaType.STRING },
               },
+              language: { type: SchemaType.STRING, nullable: true },
+              summaryEn: { type: SchemaType.STRING, nullable: true },
             },
             required: ['isPhD'],
           },
@@ -171,7 +217,17 @@ export async function runRealtimeIngestion() {
       if (model) {
         try {
           const prompt = `You are enriching job and PhD opportunity posts for a database.
-Return a JSON object with fields: city (string or null), country (string or null), isPhD (boolean), deadline (ISO8601 string or null), requirements (array of short requirement strings).
+Analyze the following text and:
+1) Detect the main language (ISO 639-1 code if possible).
+2) If the text is not primarily in English, provide a brief 1-2 sentence English summary.
+3) Return a JSON object with fields:
+   - city: string | null
+   - country: string | null
+   - isPhD: boolean (true if this is clearly a PhD/doctoral opportunity)
+   - deadline: ISO8601 string or null
+   - requirements: string[] (short bullet-style requirement sentences)
+   - language: string | null (language code or name)
+   - summaryEn: string | null (English summary or null if already English)
 
 Text:
 Title: ${item.title}
@@ -190,6 +246,8 @@ Description: ${item.description}`;
               isPhD: Boolean(parsed.isPhD),
               deadline: parsed.deadline ?? null,
               requirements: Array.isArray(parsed.requirements) ? parsed.requirements : [],
+              language: parsed.language ?? null,
+              summaryEn: parsed.summaryEn ?? null,
             };
           }
         } catch (e: any) {
@@ -207,6 +265,8 @@ Description: ${item.description}`;
           isPhD,
           deadline: null,
           requirements: ['See full description for details.'],
+          language: null,
+          summaryEn: null,
         };
       }
 
@@ -230,7 +290,7 @@ Description: ${item.description}`;
           : 'Unknown',
         country: country || 'Unknown',
         city: city || 'Unknown',
-        description: item.description,
+        description: enriched.summaryEn ?? item.description,
         requirements,
         deadline,
         postedAt: postedAtIso,
