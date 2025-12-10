@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/lib/database.types';
 import Parser from 'rss-parser';
-import { GoogleGenerativeAI, SchemaType } from '@google/genai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY as string;
