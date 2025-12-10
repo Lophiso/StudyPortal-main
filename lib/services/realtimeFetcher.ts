@@ -168,27 +168,31 @@ export async function runRealtimeIngestion() {
       let enriched: GeminiEnriched | null = null;
 
       if (model) {
-        const prompt = `You are enriching job and PhD opportunity posts for a database.
+        try {
+          const prompt = `You are enriching job and PhD opportunity posts for a database.
 Return a JSON object with fields: city (string or null), country (string or null), isPhD (boolean), deadline (ISO8601 string or null), requirements (array of short requirement strings).
 
 Text:
 Title: ${item.title}
 Description: ${item.description}`;
 
-        const response = await model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        });
+          const response = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          });
 
-        const text = response.response?.text();
-        if (text) {
-          const parsed = JSON.parse(text) as Partial<GeminiEnriched>;
-          enriched = {
-            city: parsed.city ?? null,
-            country: parsed.country ?? null,
-            isPhD: Boolean(parsed.isPhD),
-            deadline: parsed.deadline ?? null,
-            requirements: Array.isArray(parsed.requirements) ? parsed.requirements : [],
-          };
+          const text = response.response?.text();
+          if (text) {
+            const parsed = JSON.parse(text) as Partial<GeminiEnriched>;
+            enriched = {
+              city: parsed.city ?? null,
+              country: parsed.country ?? null,
+              isPhD: Boolean(parsed.isPhD),
+              deadline: parsed.deadline ?? null,
+              requirements: Array.isArray(parsed.requirements) ? parsed.requirements : [],
+            };
+          }
+        } catch (e: any) {
+          console.error('[realtimeFetcher] Gemini enrichment failed for', item.link, e?.message ?? String(e));
         }
       }
 
