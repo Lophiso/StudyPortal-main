@@ -7,8 +7,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const results = await runRealtimeIngestion();
-    return res.status(200).json({ success: true, count: results.length, results });
+    const { results, skipped } = await runRealtimeIngestion();
+    return res
+      .status(200)
+      .json({ success: true, count: results.length, results, skipped });
   } catch (error: any) {
     console.error('sync-jobs error', error);
     return res.status(500).json({ error: error?.message ?? 'Unknown error' });

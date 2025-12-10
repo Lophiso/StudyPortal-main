@@ -96,7 +96,6 @@ ${text}`;
   );
 
   if (!res.ok) {
-    console.error('Gemini HTTP error', res.status, await res.text());
     return null;
   }
 
@@ -115,9 +114,48 @@ ${text}`;
       isPhD: Boolean(parsed.isPhD),
     };
   } catch (e) {
-    console.error('Failed to parse Gemini JSON', e, textOut);
     return null;
   }
+}
+
+function heuristicEnrich(item: FeedItem): GeminiEnriched {
+  const text = `${item.title}\n${item.description}`.toLowerCase();
+
+  const isPhD = /phd|ph\.d|doctoral|doctorate/.test(text);
+
+  let city: string | null = null;
+  let country: string | null = null;
+
+  if (/remote/.test(text)) {
+    city = 'Remote';
+    country = 'International';
+  }
+
+  const requirements: string[] = [];
+  const parts = item.description
+    .replace(/<[^>]+>/g, ' ')
+    .split(/\.|\n|\r/g)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+
+  for (const p of parts) {
+    if (requirements.length >= 8) break;
+    if (/experience|knowledge|skills|required|responsibilities|we expect/i.test(p)) {
+      requirements.push(p);
+    }
+  }
+
+  if (requirements.length === 0) {
+    requirements.push('See full description for details.');
+  }
+
+  return {
+    city,
+    country,
+    requirements,
+    deadline: null,
+    isPhD,
+  };
 }
 
 export async function runRealtimeIngestion() {
@@ -143,6 +181,8 @@ export async function runRealtimeIngestion() {
     }
   }
 
+  console.log('[realtimeFetcher] total raw feed items:', feedItems.length);
+
   const uniqueByLink = new Map<string, FeedItem>();
   for (const item of feedItems) {
     if (!uniqueByLink.has(item.link)) {
@@ -152,10 +192,14 @@ export async function runRealtimeIngestion() {
 
   const items = Array.from(uniqueByLink.values()).slice(0, 50);
 
+  console.log('[realtimeFetcher] unique items after de-dup:', items.length);
+
   const results: { link: string; status: 'created' | 'updated' }[] = [];
+  const skipped: { link: string; reason: string; detail?: string }[] = [];
 
   for (const item of items) {
-    const enriched = await callGemini(item.description);
+    const enrichedFromGemini = await callGemini(item.description);
+    const enriched = enrichedFromGemini ?? heuristicEnrich(item);
 
     const city = enriched?.city || '';
     const country = enriched?.country || '';
@@ -175,7 +219,7 @@ export async function runRealtimeIngestion() {
       .limit(1);
 
     if (existingError) {
-      console.error('Existing check error', existingError);
+      skipped.push({ link: item.link, reason: 'existing_check_error', detail: existingError.message });
       continue;
     }
 
@@ -198,7 +242,7 @@ export async function runRealtimeIngestion() {
       .upsert(payload, { onConflict: 'applicationLink' });
 
     if (upsertError) {
-      console.error('Upsert error', upsertError);
+      skipped.push({ link: item.link, reason: 'upsert_error', detail: upsertError.message });
       continue;
     }
 
@@ -208,5 +252,5 @@ export async function runRealtimeIngestion() {
     });
   }
 
-  return results;
+  return { results, skipped };
 }
