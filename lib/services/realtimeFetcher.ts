@@ -114,7 +114,7 @@ export async function runRealtimeIngestion() {
   const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
   const model = genAI
     ? genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-1.5-flash-latest',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: {
