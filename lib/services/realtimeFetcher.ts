@@ -13,7 +13,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
-const rssParser = new Parser();
+const rssParser = new Parser({
+  // Make xml2js more forgiving so that bad entities like unescaped '&' don't
+  // cause the entire feed to fail with "Invalid character in entity name".
+  xml2js: { strict: false },
+});
 
 // 1. Global PhD & Academic Aggregators (The "Big Three" + more)
 const GLOBAL_PHD_FEEDS = [
@@ -21,6 +25,7 @@ const GLOBAL_PHD_FEEDS = [
   'https://www.jobs.ac.uk/feeds/type-roles?role=PhDs',
   'https://www.academicpositions.com/rss',
   'https://www.timeshighereducation.com/unijobs/rss',
+  'https://www.higheredjobs.com/rss/categoryFeed.cfm?catID=68',
 ];
 
 // 2. Science, Tech & Engineering Specific (High Value)
@@ -30,6 +35,7 @@ const STEM_FEEDS = [
   'https://www.nature.com/naturecareers/feed/rss',
   'https://jobs.sciencecareers.org/rss/jobs/',
   'https://www.newscientistjobs.com/jobs/rss/',
+  'https://www.jobs.ac.uk/feeds/discipline/engineering',
   'https://www.jobs.ac.uk/feeds/discipline/biosciences',
 ];
 
@@ -38,6 +44,7 @@ const REGIONAL_FEEDS = [
   'https://euraxess.ec.europa.eu/jobs/rss',
   'https://www.euraxess.it/jobs/rss',
   'https://www.euraxess.fr/jobs/rss',
+  'https://www.euraxess.de/jobs/rss',
   'https://www.euraxess.es/jobs/rss',
   'https://www.euraxess.nl/jobs/rss',
 ];
@@ -68,27 +75,23 @@ interface GeminiEnriched {
 
 export async function runRealtimeIngestion() {
   const feedItems: FeedItem[] = [];
-  // Smart batching: pick 1 from Global, 1 from STEM, 1 from Regional each run,
-  // plus our industry jobs feed. This keeps the function under time limits while
-  // still exploring a wide space of sources over multiple runs.
-  const pickRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
 
   const selectedFeeds: { url: string; inferredType: EngineJobType }[] = [];
 
-  if (GLOBAL_PHD_FEEDS.length > 0) {
-    selectedFeeds.push({ url: pickRandom(GLOBAL_PHD_FEEDS), inferredType: 'PHD' });
+  for (const url of GLOBAL_PHD_FEEDS) {
+    selectedFeeds.push({ url, inferredType: 'PHD' });
   }
-  if (STEM_FEEDS.length > 0) {
-    selectedFeeds.push({ url: pickRandom(STEM_FEEDS), inferredType: 'PHD' });
+  for (const url of STEM_FEEDS) {
+    selectedFeeds.push({ url, inferredType: 'PHD' });
   }
-  if (REGIONAL_FEEDS.length > 0) {
-    selectedFeeds.push({ url: pickRandom(REGIONAL_FEEDS), inferredType: 'PHD' });
+  for (const url of REGIONAL_FEEDS) {
+    selectedFeeds.push({ url, inferredType: 'PHD' });
   }
-
-  // Always include at least one industry/tech feed for non-academic jobs
   for (const url of INDUSTRY_FEEDS) {
     selectedFeeds.push({ url, inferredType: 'JOB' });
   }
+
+  console.log('[realtimeFetcher] selected feeds:', selectedFeeds.map((f) => f.url));
 
   for (const { url, inferredType } of selectedFeeds) {
     try {
@@ -119,6 +122,7 @@ export async function runRealtimeIngestion() {
           inferredType,
         });
       }
+      console.log('[realtimeFetcher] fetched', feed.items?.length ?? 0, 'items from', url);
     } catch (e) {
       console.error('[realtimeFetcher] Error parsing feed', url, e);
     }
