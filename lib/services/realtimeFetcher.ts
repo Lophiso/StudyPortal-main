@@ -17,31 +17,27 @@ const rssParser = new Parser({
   // Make xml2js more forgiving so that bad entities like unescaped '&' don't
   // cause the entire feed to fail with "Invalid character in entity name".
   xml2js: { strict: false },
+  requestOptions: {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+      Accept:
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    },
+  },
 });
 
-// 1. Academic & PhD-focused RSS feeds (universities + discipline networks)
+// 1. Core academic / PhD feeds (as requested: Euraxess + Nature Careers)
 const GLOBAL_PHD_FEEDS = [
-  // University Stonefish instances (studentships / academic jobs)
-  'https://jobs.nottingham.ac.uk/RSS/rss.aspx?cat=213',
-  'https://hr-jobs.lancs.ac.uk/RSS/rss.aspx',
-  'https://hr-jobs.lancs.ac.uk/RSS/rss.aspx?cat=160',
-
-  // KU Leuven dedicated PhD feeds
-  'https://www.kuleuven.be/personeel/jobsite/jobs/proxy/unit/50000050?hl=en&lang=en&type=rss&rel=implicit&rubriek=9003&size=10',
-  'https://www.kuleuven.be/personeel/jobsite/jobs/proxy/unit/50000050?hl=en&lang=en&type=rss&rel=implicit&rubriek=9003&from=10',
-
-  // Discipline-specific academic networks
-  'https://cstheory-jobs.org/feed/',
-  'https://cvgmt.sns.it/positions/rss.xml',
-  'https://gecogedi.dimai.unifi.it/positions/rss.xml',
-  'https://imechanica.org/taxonomy/term/73/feed',
+  'https://euraxess.ec.europa.eu/jobs/rss',
+  'https://www.nature.com/naturecareers/feed/rss',
 ];
 
 // 2. STEM / regional feeds – unused for now (kept as empty arrays for future extension)
 const STEM_FEEDS: string[] = [];
 const REGIONAL_FEEDS: string[] = [];
 
-// 3. Industry / remote tech jobs (non-academic)
+// 3. Industry / remote tech jobs (non-academic) – We Work Remotely
 const INDUSTRY_FEEDS = ['https://weworkremotely.com/remote-jobs.rss'];
 
 export type EngineJobType = 'PHD' | 'JOB';
