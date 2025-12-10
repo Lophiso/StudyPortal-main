@@ -21,7 +21,6 @@ const GLOBAL_PHD_FEEDS = [
   'https://www.jobs.ac.uk/feeds/type-roles?role=PhDs',
   'https://www.academicpositions.com/rss',
   'https://www.timeshighereducation.com/unijobs/rss',
-  'https://www.higheredjobs.com/rss/categoryFeed.cfm?catID=68',
 ];
 
 // 2. Science, Tech & Engineering Specific (High Value)
@@ -31,7 +30,6 @@ const STEM_FEEDS = [
   'https://www.nature.com/naturecareers/feed/rss',
   'https://jobs.sciencecareers.org/rss/jobs/',
   'https://www.newscientistjobs.com/jobs/rss/',
-  'https://www.jobs.ac.uk/feeds/discipline/engineering',
   'https://www.jobs.ac.uk/feeds/discipline/biosciences',
 ];
 
@@ -40,7 +38,6 @@ const REGIONAL_FEEDS = [
   'https://euraxess.ec.europa.eu/jobs/rss',
   'https://www.euraxess.it/jobs/rss',
   'https://www.euraxess.fr/jobs/rss',
-  'https://www.euraxess.de/jobs/rss',
   'https://www.euraxess.es/jobs/rss',
   'https://www.euraxess.nl/jobs/rss',
 ];
