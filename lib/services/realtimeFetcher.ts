@@ -16,8 +16,9 @@ const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 const rssParser = new Parser();
 
 const ACADEMIC_FEEDS = [
-  'https://www.timeshighereducation.com/unijobs/rss',
-  'https://www.findaphd.com/phds/rss.aspx'
+  'https://thedutchphdcoach.com/feed/',
+  'https://phdlife.warwick.ac.uk/feed/',
+  'https://ahappyphd.org/posts/index.xml',
 ];
 const TECH_FEEDS = ['https://weworkremotely.com/categories/remote-programming-jobs.rss'];
 
