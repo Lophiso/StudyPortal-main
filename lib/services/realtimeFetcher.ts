@@ -11,7 +11,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
-const ACADEMIC_FEEDS = ['https://www.timeshighereducation.com/unijobs/rss'];
+const ACADEMIC_FEEDS = [
+  'https://www.timeshighereducation.com/unijobs/rss',
+  'https://www.findaphd.com/phds/rss.aspx'
+];
 const TECH_FEEDS = ['https://weworkremotely.com/categories/remote-programming-jobs.rss'];
 
 export type EngineJobType = 'PHD' | 'JOB';
