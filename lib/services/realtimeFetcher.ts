@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/lib/database.types';
+import { SEARCH_CONFIG } from '../searchConfig';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY as string;
@@ -232,9 +233,48 @@ export async function runRealtimeIngestion() {
     }
   }
 
-  const items = Array.from(uniqueByLink.values()).slice(0, 50);
+  const rawItems = Array.from(uniqueByLink.values());
+  console.log('[realtimeFetcher] unique items after de-dup:', rawItems.length);
 
-  console.log('[realtimeFetcher] unique items after de-dup:', items.length);
+  const { phdKeywords, jobKeywords } = SEARCH_CONFIG;
+
+  // Log how many items match each keyword so you can see the engine "taking orders"
+  for (const keyword of phdKeywords) {
+    const lower = keyword.toLowerCase();
+    const count = rawItems.filter((item) => {
+      if (item.inferredType !== 'PHD') return false;
+      const text = `${item.title} ${item.description}`.toLowerCase();
+      return text.includes(lower);
+    }).length;
+    console.log(`[realtimeFetcher] Searching for PhD keyword "${keyword}"... Found ${count} items.`);
+  }
+
+  for (const keyword of jobKeywords) {
+    const lower = keyword.toLowerCase();
+    const count = rawItems.filter((item) => {
+      if (item.inferredType !== 'JOB') return false;
+      const text = `${item.title} ${item.description}`.toLowerCase();
+      return text.includes(lower);
+    }).length;
+    console.log(`[realtimeFetcher] Searching for JOB keyword "${keyword}"... Found ${count} items.`);
+  }
+
+  // Prioritize items that match the configured keywords so that new, relevant
+  // results appear at the top, while still keeping append-only history in Supabase.
+  const scored = rawItems.map((item) => {
+    const text = `${item.title} ${item.description}`.toLowerCase();
+    const keywords = item.inferredType === 'PHD' ? phdKeywords : jobKeywords;
+    let score = 0;
+    for (const kw of keywords) {
+      const lower = kw.toLowerCase();
+      if (text.includes(lower)) score += 1;
+    }
+    return { item, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+
+  const items = scored.map((s) => s.item).slice(0, 50);
 
   const results: { link: string; status: 'created' | 'updated' }[] = [];
   const skipped: { link: string; reason: string; detail?: string }[] = [];
