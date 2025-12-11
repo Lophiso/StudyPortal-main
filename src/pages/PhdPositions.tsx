@@ -68,6 +68,8 @@ export default function PhdPositions() {
   const [view, setView] = useState<PhdView>('positions');
   const [query, setQuery] = useState('');
   const [activeKeyword, setActiveKeyword] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 12;
 
   const keywordChips = ['AI / Data', 'Climate', 'Europe', 'Remote'];
 
@@ -94,6 +96,10 @@ export default function PhdPositions() {
 
     void loadJobs();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [view, query, activeKeyword, jobs]);
 
   return (
     <div className="min-h-screen bg-[#F5F7FB]">
@@ -219,7 +225,14 @@ export default function PhdPositions() {
               });
             }
 
-            if (active.length === 0) {
+            const totalItems = active.length;
+            const totalPages = Math.ceil(totalItems / pageSize) || 1;
+            const currentPage = Math.min(Math.max(page, 1), totalPages);
+            const start = (currentPage - 1) * pageSize;
+            const end = start + pageSize;
+            const visible = active.slice(start, end);
+
+            if (totalItems === 0) {
               return (
                 <p className="text-gray-600 text-sm mt-2">
                   {view === 'positions'
@@ -230,8 +243,48 @@ export default function PhdPositions() {
             }
 
             return (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {active.map((job) => (
+              <>
+                <div className="flex items-center justify-between mb-3 text-xs text-gray-600">
+                  <span>
+                    Showing
+                    {totalItems === 0
+                      ? ' 0'
+                      : ` ${start + 1}-${Math.min(end, totalItems)}`}{' '}
+                    of {totalItems} PhD items
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={currentPage === 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className={`px-2 py-1 rounded border text-xs font-medium transition-colors ${
+                        currentPage === 1
+                          ? 'border-gray-200 text-gray-300 cursor-default'
+                          : 'border-gray-300 text-[#002147] hover:bg-gray-50'
+                      }`}
+                    >
+                      Previous
+                    </button>
+                    <span>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      className={`px-2 py-1 rounded border text-xs font-medium transition-colors ${
+                        currentPage === totalPages
+                          ? 'border-gray-200 text-gray-300 cursor-default'
+                          : 'border-gray-300 text-[#002147] hover:bg-gray-50'
+                      }`}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {visible.map((job) => (
                   <article
                     key={job.id}
                     className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between"
@@ -273,8 +326,48 @@ export default function PhdPositions() {
                       </a>
                     </div>
                   </article>
-                ))}
-              </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between mt-4 text-xs text-gray-600">
+                  <span>
+                    Showing
+                    {totalItems === 0
+                      ? ' 0'
+                      : ` ${start + 1}-${Math.min(end, totalItems)}`}{' '}
+                    of {totalItems} PhD items
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={currentPage === 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className={`px-2 py-1 rounded border text-xs font-medium transition-colors ${
+                        currentPage === 1
+                          ? 'border-gray-200 text-gray-300 cursor-default'
+                          : 'border-gray-300 text-[#002147] hover:bg-gray-50'
+                      }`}
+                    >
+                      Previous
+                    </button>
+                    <span>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      className={`px-2 py-1 rounded border text-xs font-medium transition-colors ${
+                        currentPage === totalPages
+                          ? 'border-gray-200 text-gray-300 cursor-default'
+                          : 'border-gray-300 text-[#002147] hover:bg-gray-50'
+                      }`}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </>
             );
           })()
         )}
