@@ -7,6 +7,8 @@ export default function Jobs() {
   const [jobs, setJobs] = useState<JobOpportunity[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 12;
 
   useEffect(() => {
     async function loadJobs() {
@@ -30,15 +32,20 @@ export default function Jobs() {
     void loadJobs();
   }, []);
 
+  useEffect(() => {
+    setPage(1);
+  }, [jobs]);
+
   return (
     <div className="min-h-screen bg-[#F5F7FB]">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-10">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold text-[#002147] mb-2">Job & PhD Opportunities</h1>
+          <h1 className="text-3xl font-bold text-[#002147] mb-2">Jobs</h1>
           <p className="text-gray-600 max-w-2xl text-sm">
-            These opportunities are scraped from public job sources and enriched with AI
-            to highlight PhD roles, funding information, and useful tags.
+            Curated industry and remote-friendly roles collected by the job hunter bot.
+            Newest opportunities appear first, and older ones remain accessible as long
+            as they stay in the database.
           </p>
         </header>
 
@@ -58,8 +65,52 @@ export default function Jobs() {
         )}
 
         {!loading && !error && jobs && jobs.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            {jobs.map((job) => (
+          (() => {
+            const totalPages = Math.ceil(jobs.length / pageSize) || 1;
+            const currentPage = Math.min(Math.max(page, 1), totalPages);
+            const start = (currentPage - 1) * pageSize;
+            const end = start + pageSize;
+            const visible = jobs.slice(start, end);
+
+            return (
+              <>
+                <div className="flex items-center justify-between mb-3 text-xs text-gray-600">
+                  <span>
+                    Showing {start + 1}-{Math.min(end, jobs.length)} of {jobs.length} jobs
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={currentPage === 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className={`px-2 py-1 rounded border text-xs font-medium transition-colors ${
+                        currentPage === 1
+                          ? 'border-gray-200 text-gray-300 cursor-default'
+                          : 'border-gray-300 text-[#002147] hover:bg-gray-50'
+                      }`}
+                    >
+                      Previous
+                    </button>
+                    <span>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      className={`px-2 py-1 rounded border text-xs font-medium transition-colors ${
+                        currentPage === totalPages
+                          ? 'border-gray-200 text-gray-300 cursor-default'
+                          : 'border-gray-300 text-[#002147] hover:bg-gray-50'
+                      }`}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {visible.map((job) => (
               <article
                 key={job.id}
                 className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between"
@@ -108,8 +159,11 @@ export default function Jobs() {
                   </a>
                 </div>
               </article>
-            ))}
-          </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()
         )}
       </main>
     </div>
