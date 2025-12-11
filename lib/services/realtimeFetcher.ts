@@ -27,10 +27,12 @@ const rssParser = new Parser({
   },
 });
 
-// 1. Core academic / PhD feeds (as requested: Euraxess + Nature Careers)
+// 1. Core academic / PhD feeds from jobs.ac.uk (location-based RSS)
+// See https://www.jobs.ac.uk/feeds/locations for the pattern: /jobs/<region>/?format=rss
 const GLOBAL_PHD_FEEDS = [
-  'https://euraxess.ec.europa.eu/jobs/rss',
-  'https://www.nature.com/naturecareers/feed/rss',
+  'https://www.jobs.ac.uk/jobs/europe/?format=rss',
+  'https://www.jobs.ac.uk/jobs/london/?format=rss',
+  'https://www.jobs.ac.uk/jobs/scotland/?format=rss',
 ];
 
 // 2. STEM / regional feeds – unused for now (kept as empty arrays for future extension)
