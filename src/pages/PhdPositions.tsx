@@ -66,6 +66,10 @@ export default function PhdPositions() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<PhdView>('positions');
+  const [query, setQuery] = useState('');
+  const [activeKeyword, setActiveKeyword] = useState<string | null>(null);
+
+  const keywordChips = ['AI / Data', 'Climate', 'Europe', 'Remote'];
 
   useEffect(() => {
     async function loadJobs() {
@@ -95,7 +99,7 @@ export default function PhdPositions() {
     <div className="min-h-screen bg-[#F5F7FB]">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-10">
-        <header className="mb-8">
+        <header className="mb-6">
           <h1 className="text-3xl font-bold text-[#002147] mb-2">PhD Positions</h1>
           <p className="text-gray-600 max-w-2xl text-sm">
             Curated doctoral and PhD opportunities from leading universities and research
@@ -103,6 +107,35 @@ export default function PhdPositions() {
             how to apply.
           </p>
         </header>
+
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 mb-4">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by title, institution, or topic..."
+            className="w-full md:max-w-sm px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#002147] focus:border-transparent bg-white"
+          />
+
+          <div className="flex flex-wrap gap-2 text-xs">
+            {keywordChips.map((label) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() =>
+                  setActiveKeyword((current) => (current === label ? null : label))
+                }
+                className={`px-2.5 py-1 rounded-full border transition-colors ${
+                  activeKeyword === label
+                    ? 'bg-[#002147] text-white border-[#002147]'
+                    : 'bg-white text-[#002147] border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {loading && <p className="text-gray-600 text-sm">Loading PhD positions…</p>}
 
@@ -146,7 +179,45 @@ export default function PhdPositions() {
           (() => {
             const positions = jobs.filter(isPositionLike);
             const articles = jobs.filter((job) => !isPositionLike(job));
-            const active = view === 'positions' ? positions : articles;
+            let active = view === 'positions' ? positions : articles;
+
+            const normalizedQuery = query.trim().toLowerCase();
+            if (normalizedQuery) {
+              active = active.filter((job) => {
+                const text = `${job.title ?? ''} ${job.company ?? ''} ${job.city ?? ''} ${
+                  job.country ?? ''
+                } ${job.description ?? ''}`
+                  .toString()
+                  .toLowerCase();
+                return text.includes(normalizedQuery);
+              });
+            }
+
+            if (activeKeyword) {
+              const kw = activeKeyword.toLowerCase();
+              active = active.filter((job) => {
+                const text = `${job.title ?? ''} ${job.description ?? ''}`
+                  .toString()
+                  .toLowerCase();
+
+                if (kw.includes('ai')) {
+                  return /ai|artificial intelligence|machine learning|data science/.test(text);
+                }
+                if (kw.includes('climate')) {
+                  return /climate|sustainability|environment|energy/.test(text);
+                }
+                if (kw.includes('europe')) {
+                  return /europe|european|germany|italy|france|spain|netherlands|sweden|norway|denmark/.test(
+                    text,
+                  );
+                }
+                if (kw.includes('remote')) {
+                  return /remote/.test(text);
+                }
+
+                return true;
+              });
+            }
 
             if (active.length === 0) {
               return (
