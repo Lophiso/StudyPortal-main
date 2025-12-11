@@ -1,0 +1,145 @@
+import 'dotenv/config';
+import { createClient } from '@supabase/supabase-js';
+import { TavilyClient } from '@tavily/core';
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_KEY;
+const tavilyApiKey = process.env.TAVILY_API_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error('SUPABASE_URL and SUPABASE_KEY must be set');
+}
+if (!tavilyApiKey) {
+  throw new Error('TAVILY_API_KEY must be set for aiHunter');
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const tavily = new TavilyClient({ apiKey: tavilyApiKey });
+
+type HunterType = 'PHD' | 'JOB';
+
+interface RawResult {
+  queryTag: string;
+  type: HunterType;
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+async function huntWithTavily(query: string, type: HunterType, queryTag: string): Promise<RawResult[]> {
+  console.log('[aiHunter] Tavily search', { query, type, queryTag });
+
+  const response = await tavily.search({
+    query,
+    searchDepth: 'advanced',
+    includeAnswer: true,
+    maxResults: 10,
+  } as any);
+
+  const results = (response?.results ?? []) as Array<{ title?: string; url?: string; content?: string }>;
+
+  return results
+    .filter((r) => r.url && r.title)
+    .map((r) => ({
+      queryTag,
+      type,
+      title: r.title!.trim(),
+      url: r.url!,
+      snippet: (r.content ?? '').trim(),
+    }));
+}
+
+function dedupeByUrl(items: RawResult[]): RawResult[] {
+  const seen = new Set<string>();
+  const out: RawResult[] = [];
+  for (const item of items) {
+    if (seen.has(item.url)) continue;
+    seen.add(item.url);
+    out.push(item);
+  }
+  return out;
+}
+
+async function upsertFromResult(result: RawResult) {
+  const isPhdType = result.type === 'PHD';
+
+  const payload: any = {
+    title: result.title,
+    type: isPhdType ? 'PHD' : 'JOB',
+    company: 'Unknown',
+    country: 'Unknown',
+    city: 'Unknown',
+    description: result.snippet || null,
+    requirements: ['See full description for details.'],
+    deadline: null,
+    postedAt: new Date().toISOString(),
+    applicationLink: result.url,
+    source: `TAVILY_${result.queryTag}`,
+  };
+
+  const { error } = await supabase
+    .from('JobOpportunity')
+    .upsert(payload, { onConflict: 'applicationLink' });
+
+  if (error) {
+    console.error('[aiHunter] upsert error for', result.url, error.message);
+  }
+}
+
+export async function runAiHunter() {
+  console.log('[aiHunter] starting Tavily AI hunter');
+
+  const queries: Array<{ q: string; type: HunterType; tag: string }> = [
+    {
+      q: 'PhD position Artificial Intelligence Europe funded',
+      type: 'PHD',
+      tag: 'PHD_AI_EUROPE',
+    },
+    {
+      q: 'Marie Curie Fellowship 2025 deadline',
+      type: 'PHD',
+      tag: 'PHD_MARIE_CURIE',
+    },
+    {
+      q: 'Junior DevOps Engineer remote Italy',
+      type: 'JOB',
+      tag: 'JOB_JUNIOR_DEVOPS_IT_REMOTE',
+    },
+    {
+      q: 'React Developer remote Europe',
+      type: 'JOB',
+      tag: 'JOB_REACT_EUROPE_REMOTE',
+    },
+  ];
+
+  const allResults: RawResult[] = [];
+
+  for (const { q, type, tag } of queries) {
+    try {
+      const results = await huntWithTavily(q, type, tag);
+      console.log('[aiHunter] query results', { tag, count: results.length });
+      allResults.push(...results);
+    } catch (e) {
+      console.error('[aiHunter] Tavily search failed', { query: q, tag, error: (e as Error).message });
+    }
+  }
+
+  const unique = dedupeByUrl(allResults);
+  console.log('[aiHunter] total tavily results:', allResults.length);
+  console.log('[aiHunter] unique after dedupe:', unique.length);
+
+  for (const result of unique) {
+    try {
+      await upsertFromResult(result);
+    } catch (e) {
+      console.error('[aiHunter] failed to upsert result', result.url, e);
+    }
+  }
+
+  console.log('[aiHunter] completed run');
+}
+
+runAiHunter().catch((e) => {
+  console.error('[aiHunter] fatal error', e);
+  process.exitCode = 1;
+});
