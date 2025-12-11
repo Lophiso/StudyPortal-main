@@ -105,7 +105,7 @@ export default function PhdPositions() {
     <div className="min-h-screen bg-[#F5F7FB]">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-10">
-        <header className="mb-6">
+        <header className="mb-6 sticky top-16 z-20 bg-[#F5F7FB] pb-3">
           <h1 className="text-3xl font-bold text-[#002147] mb-2">PhD Positions</h1>
           <p className="text-gray-600 max-w-2xl text-sm">
             Curated doctoral and PhD opportunities from leading universities and research
