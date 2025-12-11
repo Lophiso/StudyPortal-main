@@ -19,6 +19,8 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db
         run: npm ci
 
       - name: Run job hunter bot
