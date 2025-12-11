@@ -8,6 +8,8 @@ export default function Jobs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [query, setQuery] = useState('');
+  const [remoteOnly, setRemoteOnly] = useState(false);
   const pageSize = 12;
 
   useEffect(() => {
@@ -34,13 +36,13 @@ export default function Jobs() {
 
   useEffect(() => {
     setPage(1);
-  }, [jobs]);
+  }, [jobs, query, remoteOnly]);
 
   return (
     <div className="min-h-screen bg-[#F5F7FB]">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-10">
-        <header className="mb-8">
+        <header className="mb-6">
           <h1 className="text-3xl font-bold text-[#002147] mb-2">Jobs</h1>
           <p className="text-gray-600 max-w-2xl text-sm">
             Curated industry and remote-friendly roles collected by the job hunter bot.
@@ -48,6 +50,25 @@ export default function Jobs() {
             as they stay in the database.
           </p>
         </header>
+
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 mb-4">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by title, company, or location..."
+            className="w-full md:max-w-sm px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#002147] focus:border-transparent bg-white"
+          />
+          <label className="inline-flex items-center text-xs text-gray-700 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="w-4 h-4 text-[#FF9900] border-gray-300 rounded focus:ring-[#FF9900] mr-2"
+              checked={remoteOnly}
+              onChange={(e) => setRemoteOnly(e.target.checked)}
+            />
+            Remote only
+          </label>
+        </div>
 
         {loading && (
           <p className="text-gray-600 text-sm">Loading opportunities…</p>
@@ -66,17 +87,47 @@ export default function Jobs() {
 
         {!loading && !error && jobs && jobs.length > 0 && (
           (() => {
-            const totalPages = Math.ceil(jobs.length / pageSize) || 1;
+            const normalizedQuery = query.trim().toLowerCase();
+            const filtered = jobs.filter((job) => {
+              const text = `${job.title ?? ''} ${job.company ?? ''} ${job.city ?? ''} ${
+                job.country ?? ''
+              } ${job.description ?? ''}`
+                .toString()
+                .toLowerCase();
+
+              if (normalizedQuery && !text.includes(normalizedQuery)) {
+                return false;
+              }
+
+              if (remoteOnly) {
+                const remoteText = `${job.city ?? ''} ${job.country ?? ''} ${job.title ?? ''} ${
+                  job.description ?? ''
+                }`
+                  .toString()
+                  .toLowerCase();
+                if (!remoteText.includes('remote')) {
+                  return false;
+                }
+              }
+
+              return true;
+            });
+
+            const totalPages = Math.ceil(filtered.length / pageSize) || 1;
             const currentPage = Math.min(Math.max(page, 1), totalPages);
             const start = (currentPage - 1) * pageSize;
             const end = start + pageSize;
-            const visible = jobs.slice(start, end);
+            const visible = filtered.slice(start, end);
 
             return (
               <>
                 <div className="flex items-center justify-between mb-3 text-xs text-gray-600">
                   <span>
-                    Showing {start + 1}-{Math.min(end, jobs.length)} of {jobs.length} jobs
+                    Showing
+                    {filtered.length === 0
+                      ? ' 0'
+                      : ` ${start + 1}-${Math.min(end, filtered.length)}`}{' '}
+                    of {filtered.length} jobs
                   </span>
                   <div className="flex items-center gap-2">
                     <button
