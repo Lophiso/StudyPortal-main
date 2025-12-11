@@ -40,7 +40,7 @@ const geminiModel = genAI
   : null;
 
 interface RawJob {
-  source: 'FINDAPHD' | 'REMOTE_SEARCH';
+  source: 'FINDAPHD' | 'WWR_REMOTE';
   url: string;
   title: string;
   snippet: string;
@@ -123,15 +123,15 @@ async function scrapeFindAPhD(page: any): Promise<RawJob[]> {
 
   await page.goto(url, { waitUntil: 'networkidle2', timeout: 60_000 });
 
-  // Heuristic selectors based on FindAPhD layout: titles are usually links inside result cards
+  // Heuristic selectors: focus on links that look like individual PhD listings on findaphd.com
   const jobs: RawJob[] = await page.$$eval('a', (anchors: any[]) => {
     const items: any[] = [];
     for (const a of anchors) {
       const href = (a as HTMLAnchorElement).href;
       const text = (a.textContent || '').trim();
       if (!href || !text) continue;
-      // Only keep obvious PhD listing links
-      if (!/phd|ph\.d|doctorate/i.test(text)) continue;
+      if (!href.includes('findaphd.com')) continue;
+      if (!/phd|ph\.d|doctoral|doctorate/i.test(text)) continue;
 
       items.push({
         source: 'FINDAPHD',
@@ -139,7 +139,7 @@ async function scrapeFindAPhD(page: any): Promise<RawJob[]> {
         title: text,
         snippet: text,
       });
-      if (items.length >= 25) break;
+      if (items.length >= 40) break;
     }
     return items;
   });
@@ -148,35 +148,50 @@ async function scrapeFindAPhD(page: any): Promise<RawJob[]> {
   return jobs;
 }
 
-async function scrapeRemoteSearch(page: any): Promise<RawJob[]> {
-  const url = 'https://www.google.com/search?q=remote+developer+jobs&ibp=htl;jobs';
-  console.log('[hunter] scraping remote dev search:', url);
+async function scrapeWeWorkRemotely(page: any): Promise<RawJob[]> {
+  const url = 'https://weworkremotely.com/categories/remote-programming-jobs';
+  console.log('[hunter] scraping We Work Remotely:', url);
 
   await page.goto(url, { waitUntil: 'networkidle2', timeout: 60_000 });
 
-  // Google Jobs is heavily dynamic and may not render without full interaction or may block automation;
-  // as a conservative fallback, just grab visible job-like links containing "Developer" or "Engineer".
-  const jobs: RawJob[] = await page.$$eval('a', (anchors) => {
-    const items: RawJob[] = [] as any;
+  const jobs: RawJob[] = await page.$$eval('a', (anchors: any[]) => {
+    const items: any[] = [];
+
     for (const a of anchors) {
       const href = (a as HTMLAnchorElement).href;
       const text = (a.textContent || '').trim();
       if (!href || !text) continue;
-      if (!/developer|engineer/i.test(text)) continue;
+      if (!href.includes('weworkremotely.com')) continue;
+      if (!/developer|engineer|software|frontend|backend|fullstack|full-stack/i.test(text)) {
+        continue;
+      }
 
       items.push({
-        source: 'REMOTE_SEARCH',
+        source: 'WWR_REMOTE',
         url: href,
         title: text,
         snippet: text,
       });
-      if (items.length >= 25) break;
+
+      if (items.length >= 40) break;
     }
+
     return items;
   });
 
-  console.log('[hunter] remote search raw items:', jobs.length);
+  console.log('[hunter] WWR remote items:', jobs.length);
   return jobs;
+}
+
+function dedupeRawJobs(jobs: RawJob[]): RawJob[] {
+  const seen = new Set<string>();
+  const result: RawJob[] = [];
+  for (const job of jobs) {
+    if (seen.has(job.url)) continue;
+    seen.add(job.url);
+    result.push(job);
+  }
+  return result;
 }
 
 async function upsertJob(raw: RawJob, enriched: EnrichedJob) {
@@ -225,14 +240,16 @@ export async function runHunter() {
     }
 
     try {
-      allRaw.push(...(await scrapeRemoteSearch(page)));
+      allRaw.push(...(await scrapeWeWorkRemotely(page)));
     } catch (e) {
-      console.error('[hunter] remote search scrape failed', e);
+      console.error('[hunter] WWR scrape failed', e);
     }
 
+    const uniqueRaw = dedupeRawJobs(allRaw);
     console.log('[hunter] total raw scraped items:', allRaw.length);
+    console.log('[hunter] unique items after dedupe:', uniqueRaw.length);
 
-    for (const raw of allRaw) {
+    for (const raw of uniqueRaw) {
       try {
         const enriched = await analyzeWithGemini(raw);
         await upsertJob(raw, enriched);
