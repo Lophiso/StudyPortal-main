@@ -19,6 +19,7 @@
     "@supabase/supabase-js": "^2.57.4",
     "@vercel/node": "^5.5.15",
     "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.4.5",
     "lucide-react": "^0.344.0",
     "prisma": "^7.1.0",
     "puppeteer-core": "^24.32.1",
