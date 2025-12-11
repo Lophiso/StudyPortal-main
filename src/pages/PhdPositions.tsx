@@ -5,21 +5,60 @@ import type { JobOpportunity } from '../lib/database.types';
 
 type PhdView = 'positions' | 'articles';
 
-function isPositionLike(job: JobOpportunity): boolean {
-  const text = `${job.title} ${job.description ?? ''}`.toLowerCase();
-  const positionKeywords = [
-    'phd position',
-    'ph.d. position',
-    'phd vacancy',
-    'vacancy',
-    'studentship',
-    'scholarship',
-    'call for applications',
-    'open position',
-    'fully funded phd',
-  ];
+const ARTICLE_TITLE_KEYWORDS = [
+  'how to ',
+  'how do i ',
+  'top ',
+  'tips',
+  'tricks',
+  'guide',
+  'the importance',
+  'importance of',
+  'mental health',
+  'impostors',
+  'impostor syndrome',
+  'why ',
+  'what i ',
+  'on being a phd',
+  'doing a phd',
+  'life as a phd',
+];
 
-  return positionKeywords.some((kw) => text.includes(kw));
+const ARTICLE_DOMAINS = [
+  'phdlife',
+  'ahappyp',
+  'doctoral',
+];
+
+function getHostname(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const { hostname } = new URL(url);
+    return hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isArticleLike(job: JobOpportunity): boolean {
+  const title = (job.title || '').toLowerCase();
+  const description = (job.description || '').toLowerCase();
+  const text = `${title} ${description}`;
+
+  if (ARTICLE_TITLE_KEYWORDS.some((kw) => text.includes(kw))) {
+    return true;
+  }
+
+  const hostname = getHostname(job.applicationLink as string | null | undefined);
+  if (hostname && ARTICLE_DOMAINS.some((d) => hostname.includes(d))) {
+    return true;
+  }
+
+  return false;
+}
+
+function isPositionLike(job: JobOpportunity): boolean {
+  return !isArticleLike(job);
 }
 
 export default function PhdPositions() {
