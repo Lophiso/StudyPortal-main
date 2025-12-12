@@ -21,7 +21,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
 const geminiModel = genAI
   ? genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-flash',
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: {
@@ -148,32 +148,46 @@ Text:
 Title: ${job.title}
 Snippet: ${job.snippet}`;
 
-  const res = await geminiModel.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-  });
-
-  const text = res.response?.text();
-  if (!text) {
-    return {
-      title: job.title,
-      company: null,
-      isPhD: false,
-      location: null,
-      deadline: null,
-    };
-  }
-
   try {
+    const res = await geminiModel.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    });
+
+    const text = res.response?.text();
+    if (!text) {
+      console.error('[hunter][AI ERROR] Empty response text from Gemini for', job.url);
+      return {
+        title: job.title,
+        company: null,
+        isPhD: false,
+        location: null,
+        deadline: null,
+      };
+    }
+
     const parsed = JSON.parse(text) as Partial<EnrichedJob>;
-    return {
+    const result: EnrichedJob = {
       title: parsed.title ?? job.title,
       company: parsed.company ?? null,
       isPhD: Boolean(parsed.isPhD),
       location: parsed.location ?? null,
       deadline: parsed.deadline ?? null,
     };
-  } catch (e) {
-    console.error('[hunter] Failed to parse Gemini JSON for', job.url, e);
+
+    console.log(
+      '[hunter][AI SUCCESS] Extracted:',
+      JSON.stringify({ title: result.title, isPhD: result.isPhD, location: result.location }, null, 2),
+    );
+
+    return result;
+  } catch (e: any) {
+    console.error('[hunter][AI ERROR] Gemini request failed for', job.url);
+    console.error('  Error object:', e);
+    if (e instanceof Error) {
+      console.error('  Error name:', e.name);
+      console.error('  Error message:', e.message);
+    }
+
     return {
       title: job.title,
       company: null,
