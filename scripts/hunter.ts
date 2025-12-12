@@ -455,7 +455,21 @@ export async function runHunter() {
         const enriched = await analyzeWithGemini(raw);
         await upsertJob(raw, enriched);
       } catch (e) {
-        console.error('[hunter] failed to process job', raw.url, e);
+        console.error('[hunter] failed to process job with Gemini, falling back to basic upsert', raw.url, e);
+
+        const fallback: EnrichedJob = {
+          title: raw.title,
+          company: null,
+          isPhD: /phd|ph\.d|doctoral|doctorate/i.test(`${raw.title} ${raw.snippet}`),
+          location: null,
+          deadline: null,
+        };
+
+        try {
+          await upsertJob(raw, fallback);
+        } catch (inner) {
+          console.error('[hunter] fallback upsert also failed for', raw.url, inner);
+        }
       }
     }
 
