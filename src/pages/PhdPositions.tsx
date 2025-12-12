@@ -132,6 +132,10 @@ export default function PhdPositions() {
     setPage(1);
   }, [view, query, activeKeyword, jobs]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [page]);
+
   return (
     <div className="min-h-screen bg-[#F5F7FB]">
       <Navbar />

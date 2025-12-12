@@ -38,6 +38,10 @@ export default function Jobs() {
     setPage(1);
   }, [jobs, query, remoteOnly]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [page]);
+
   return (
     <div className="min-h-screen bg-[#F5F7FB]">
       <Navbar />
