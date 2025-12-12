@@ -231,6 +231,7 @@ export default function PhdPositions() {
             const start = (currentPage - 1) * pageSize;
             const end = start + pageSize;
             const visible = active.slice(start, end);
+            const totalStored = jobs.length;
 
             if (totalItems === 0) {
               return (
@@ -250,7 +251,7 @@ export default function PhdPositions() {
                     {totalItems === 0
                       ? ' 0'
                       : ` ${start + 1}-${Math.min(end, totalItems)}`}{' '}
-                    of {totalItems} PhD items
+                    of {totalItems} PhD items (out of {totalStored} stored)
                   </span>
                   <div className="flex items-center gap-2">
                     <button

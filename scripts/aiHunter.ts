@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
-import { TavilyClient } from '@tavily/core';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_KEY;
@@ -14,7 +13,6 @@ if (!tavilyApiKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-const tavily = new TavilyClient({ apiKey: tavilyApiKey });
 
 type HunterType = 'PHD' | 'JOB';
 
@@ -29,14 +27,31 @@ interface RawResult {
 async function huntWithTavily(query: string, type: HunterType, queryTag: string): Promise<RawResult[]> {
   console.log('[aiHunter] Tavily search', { query, type, queryTag });
 
-  const response = await tavily.search({
-    query,
-    searchDepth: 'advanced',
-    includeAnswer: true,
-    maxResults: 10,
-  } as any);
+  const res = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${tavilyApiKey}`,
+    },
+    body: JSON.stringify({
+      query,
+      search_depth: 'advanced',
+      include_answer: true,
+      max_results: 10,
+    }),
+  });
 
-  const results = (response?.results ?? []) as Array<{ title?: string; url?: string; content?: string }>;
+  if (!res.ok) {
+    const text = await res.text();
+    console.error('[aiHunter] Tavily HTTP error', res.status, text);
+    return [];
+  }
+
+  const data = (await res.json()) as {
+    results?: Array<{ title?: string; url?: string; content?: string }>;
+  };
+
+  const results = data.results ?? [];
 
   return results
     .filter((r) => r.url && r.title)

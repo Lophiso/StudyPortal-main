@@ -40,7 +40,14 @@ const geminiModel = genAI
   : null;
 
 interface RawJob {
-  source: 'FINDAPHD' | 'WWR_REMOTE';
+  source:
+    | 'FINDAPHD'
+    | 'WWR_REMOTE'
+    | 'DAAD_GERMANY'
+    | 'ACADEMICTRANSFER_NL'
+    | 'UAFF_CANADA'
+    | 'THE_AUSTRALIA'
+    | 'TALENT_IT';
   url: string;
   title: string;
   snippet: string;
@@ -183,6 +190,162 @@ async function scrapeWeWorkRemotely(page: any): Promise<RawJob[]> {
   return jobs;
 }
 
+async function huntPhdGermany(page: any): Promise<RawJob[]> {
+  const url =
+    'https://www2.daad.de/deutschland/studienangebote/international-programmes/en/result/?q=&degree%5B%5D=4';
+  console.log('[hunter] scraping DAAD Germany PhDs:', url);
+
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 60_000 });
+
+  const jobs: RawJob[] = await page.$$eval('a', (anchors: any[]) => {
+    const items: any[] = [];
+    for (const a of anchors) {
+      const href = (a as HTMLAnchorElement).href;
+      const text = (a.textContent || '').trim();
+      if (!href || !text) continue;
+      if (!href.includes('daad.de')) continue;
+
+      items.push({
+        source: 'DAAD_GERMANY',
+        url: href,
+        title: text,
+        snippet: text,
+      });
+    }
+    return items;
+  });
+
+  console.log('[hunter] DAAD Germany items:', jobs.length);
+  return jobs;
+}
+
+async function huntPhdNetherlands(page: any): Promise<RawJob[]> {
+  const url = 'https://www.academictransfer.com/en/jobs/?q=PhD';
+  console.log('[hunter] scraping AcademicTransfer Netherlands PhDs:', url);
+
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 60_000 });
+
+  const jobs: RawJob[] = await page.$$eval('a', (anchors: any[]) => {
+    const items: any[] = [];
+    for (const a of anchors) {
+      const href = (a as HTMLAnchorElement).href;
+      const text = (a.textContent || '').trim();
+      if (!href || !text) continue;
+      if (!href.includes('academictransfer.com')) continue;
+
+      items.push({
+        source: 'ACADEMICTRANSFER_NL',
+        url: href,
+        title: text,
+        snippet: text,
+      });
+    }
+    return items;
+  });
+
+  console.log('[hunter] AcademicTransfer NL items:', jobs.length);
+  return jobs;
+}
+
+async function huntPhdCanada(page: any): Promise<RawJob[]> {
+  const url = 'https://universityaffairs.ca/search-jobs/?keywords=PhD';
+  console.log('[hunter] scraping University Affairs Canada PhDs:', url);
+
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 60_000 });
+
+  const jobs: RawJob[] = await page.$$eval('a', (anchors: any[]) => {
+    const items: any[] = [];
+    for (const a of anchors) {
+      const href = (a as HTMLAnchorElement).href;
+      const text = (a.textContent || '').trim();
+      if (!href || !text) continue;
+      if (!href.includes('universityaffairs.ca')) continue;
+
+      items.push({
+        source: 'UAFF_CANADA',
+        url: href,
+        title: text,
+        snippet: text,
+      });
+    }
+    return items;
+  });
+
+  console.log('[hunter] University Affairs Canada items:', jobs.length);
+  return jobs;
+}
+
+async function huntPhdAustralia(page: any): Promise<RawJob[]> {
+  const url = 'https://www.timeshighereducation.com/unijobs/listings/australia/?keywords=PhD';
+  console.log('[hunter] scraping THE Australia PhDs:', url);
+
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 60_000 });
+
+  const jobs: RawJob[] = await page.$$eval('a', (anchors: any[]) => {
+    const items: any[] = [];
+    for (const a of anchors) {
+      const href = (a as HTMLAnchorElement).href;
+      const text = (a.textContent || '').trim();
+      if (!href || !text) continue;
+      if (!href.includes('timeshighereducation.com')) continue;
+
+      items.push({
+        source: 'THE_AUSTRALIA',
+        url: href,
+        title: text,
+        snippet: text,
+      });
+    }
+    return items;
+  });
+
+  console.log('[hunter] THE Australia items:', jobs.length);
+  return jobs;
+}
+
+async function huntItalianTech(page: any): Promise<RawJob[]> {
+  const base = 'https://it.talent.com/jobs';
+  const queries = [
+    'k=Cloud+Computing&l=Italy',
+    'k=DevOps&l=Italy',
+    'k=AI+Engineer&l=Italy',
+    'k=Web+Developer&l=Italy',
+    'k=Data+Analyst&l=Italy',
+  ];
+
+  const all: RawJob[] = [];
+
+  for (const q of queries) {
+    const url = `${base}?${q}`;
+    console.log('[hunter] scraping Talent.com Italy jobs:', url);
+
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 60_000 });
+
+    const jobs: RawJob[] = await page.$$eval('a', (anchors: any[]) => {
+      const items: any[] = [];
+      for (const a of anchors) {
+        const href = (a as HTMLAnchorElement).href;
+        const text = (a.textContent || '').trim();
+        if (!href || !text) continue;
+        if (!href.includes('talent.com')) continue;
+
+        items.push({
+          source: 'TALENT_IT',
+          url: href,
+          title: text,
+          snippet: text,
+        });
+      }
+      return items;
+    });
+
+    console.log('[hunter] Talent.com Italy items for query', q, ':', jobs.length);
+    all.push(...jobs);
+  }
+
+  return all;
+}
+
 function dedupeRawJobs(jobs: RawJob[]): RawJob[] {
   const seen = new Set<string>();
   const result: RawJob[] = [];
@@ -195,7 +358,15 @@ function dedupeRawJobs(jobs: RawJob[]): RawJob[] {
 }
 
 async function upsertJob(raw: RawJob, enriched: EnrichedJob) {
-  const isPhDType = enriched.isPhD || raw.source === 'FINDAPHD';
+  const phdSources = new Set<RawJob['source']>([
+    'FINDAPHD',
+    'DAAD_GERMANY',
+    'ACADEMICTRANSFER_NL',
+    'UAFF_CANADA',
+    'THE_AUSTRALIA',
+  ]);
+
+  const isPhDType = enriched.isPhD || phdSources.has(raw.source);
 
   const payload: any = {
     title: enriched.title || raw.title,
@@ -243,6 +414,36 @@ export async function runHunter() {
       allRaw.push(...(await scrapeWeWorkRemotely(page)));
     } catch (e) {
       console.error('[hunter] WWR scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntPhdGermany(page)));
+    } catch (e) {
+      console.error('[hunter] DAAD Germany scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntPhdNetherlands(page)));
+    } catch (e) {
+      console.error('[hunter] AcademicTransfer NL scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntPhdCanada(page)));
+    } catch (e) {
+      console.error('[hunter] University Affairs Canada scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntPhdAustralia(page)));
+    } catch (e) {
+      console.error('[hunter] THE Australia scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntItalianTech(page)));
+    } catch (e) {
+      console.error('[hunter] Talent.com Italy scrape failed', e);
     }
 
     const uniqueRaw = dedupeRawJobs(allRaw);

@@ -118,6 +118,7 @@ export default function Jobs() {
             const start = (currentPage - 1) * pageSize;
             const end = start + pageSize;
             const visible = filtered.slice(start, end);
+            const totalCount = jobs.length;
 
             return (
               <>
@@ -127,7 +128,7 @@ export default function Jobs() {
                     {filtered.length === 0
                       ? ' 0'
                       : ` ${start + 1}-${Math.min(end, filtered.length)}`}{' '}
-                    of {filtered.length} jobs
+                    of {filtered.length} jobs (out of {totalCount} stored)
                   </span>
                   <div className="flex items-center gap-2">
                     <button
@@ -219,7 +220,7 @@ export default function Jobs() {
                     {filtered.length === 0
                       ? ' 0'
                       : ` ${start + 1}-${Math.min(end, filtered.length)}`}{' '}
-                    of {filtered.length} jobs
+                    of {filtered.length} jobs (out of {totalCount} stored)
                   </span>
                   <div className="flex items-center gap-2">
                     <button
