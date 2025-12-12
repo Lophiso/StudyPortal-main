@@ -21,7 +21,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
 const geminiModel = genAI
   ? genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash-latest',
+      model: 'gemini-1.5-flash',
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: {
@@ -73,15 +73,28 @@ const GENERIC_PAGE_KEYWORDS = [
   'legal notice',
   'cookie policy',
   'cookies',
+  'cookie settings',
+  'cookie preferences',
+  'impostazioni dei cookie',
   'data protection',
   'disclaimer',
   'sitemap',
   'accessibility',
+  'skip to main content',
+  'job sorting option',
+  'create alert',
+  'direct employer',
+  'australian dollars',
+  'south australia',
+  'western australia',
+  'new south wales',
   'login',
   'log in',
   'sign in',
   'register',
   'create account',
+  'my account',
+  'account settings',
   'help center',
   'support center',
 ];
@@ -94,11 +107,14 @@ function isGenericPageTitle(title: string): boolean {
     return true;
   }
 
-  const hasOpportunityKeyword = /phd|ph\.d|doctoral|doctorate|position|studentship|fellowship|professor|lecturer|researcher|engineer|developer|analyst/i.test(
+  const hasOpportunityKeyword = /phd|ph\.d|doctoral|doctorate|position|studentship|fellowship|professor|lecturer|research(er)?|assistant professor|lecturer|postdoc|post-doctoral|scholarship|studentship|vacancy|opening|job|role|engineer|developer|analyst|scientist|manager|intern/i.test(
     text,
   );
   const compact = text.replace(/[^a-z0-9]+/gi, '');
-  if (!hasOpportunityKeyword && compact.length <= 10) {
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+
+  // Short titles without any opportunity keywords are almost always filters, regions, or UI labels.
+  if (!hasOpportunityKeyword && (compact.length <= 12 || wordCount <= 3)) {
     return true;
   }
 
