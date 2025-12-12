@@ -162,19 +162,34 @@ export default function Jobs() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  {visible.map((job) => (
-                    <article
-                      key={job.id}
-                      className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between"
-                    >
-                      <div>
-                        <h2 className="text-lg font-semibold text-[#002147] mb-1">
-                          {job.title}
-                        </h2>
-                        <p className="text-sm text-gray-700 mb-1">{job.company}</p>
-                        <p className="text-xs text-gray-500 mb-1">
-                          {job.city}, {job.country}
-                        </p>
+                  {visible.map((job) => {
+                    const hasCompany = job.company && job.company !== 'Unknown';
+                    const hasCity = job.city && job.city !== 'Unknown';
+                    const hasCountry = job.country && job.country !== 'Unknown';
+
+                    return (
+                      <article
+                        key={job.id}
+                        onClick={() =>
+                          job.applicationLink &&
+                          window.open(job.applicationLink as string, '_blank', 'noopener')
+                        }
+                        className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between cursor-pointer"
+                      >
+                        <div>
+                          <h2 className="text-lg font-semibold text-[#002147] mb-1">
+                            {job.title}
+                          </h2>
+                          {hasCompany && (
+                            <p className="text-sm text-gray-700 mb-1">{job.company}</p>
+                          )}
+                          {(hasCity || hasCountry) && (
+                            <p className="text-xs text-gray-500 mb-1">
+                              {[hasCity ? job.city : null, hasCountry ? job.country : null]
+                                .filter(Boolean)
+                                .join(', ')}
+                            </p>
+                          )}
 
                         <div className="text-xs text-gray-600 space-y-1 mt-2">
                           <p>
@@ -206,12 +221,14 @@ export default function Jobs() {
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center justify-center rounded-md bg-[#FF9900] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#e68a00] transition-colors"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           Apply on website
                         </a>
                       </div>
                     </article>
-                  ))}
+                  );
+                  })}
                 </div>
 
                 <div className="flex items-center justify-between mt-4 text-xs text-gray-600">

@@ -61,6 +61,50 @@ interface EnrichedJob {
   deadline: string | null; // ISO if known
 }
 
+const GENERIC_PAGE_KEYWORDS = [
+  'privacy policy',
+  'terms & conditions',
+  'terms and conditions',
+  'contact us',
+  'contact',
+  'about us',
+  'about',
+  'imprint',
+  'legal notice',
+  'cookie policy',
+  'cookies',
+  'data protection',
+  'disclaimer',
+  'sitemap',
+  'accessibility',
+  'login',
+  'log in',
+  'sign in',
+  'register',
+  'create account',
+  'help center',
+  'support center',
+];
+
+function isGenericPageTitle(title: string): boolean {
+  const text = (title || '').toLowerCase();
+  if (!text) return true;
+
+  if (GENERIC_PAGE_KEYWORDS.some((kw) => text.includes(kw))) {
+    return true;
+  }
+
+  const hasOpportunityKeyword = /phd|ph\.d|doctoral|doctorate|position|studentship|fellowship|professor|lecturer|researcher|engineer|developer|analyst/i.test(
+    text,
+  );
+  const compact = text.replace(/[^a-z0-9]+/gi, '');
+  if (!hasOpportunityKeyword && compact.length <= 10) {
+    return true;
+  }
+
+  return false;
+}
+
 async function analyzeWithGemini(job: RawJob): Promise<EnrichedJob> {
   if (!geminiModel) {
     const text = `${job.title}\n${job.snippet}`.toLowerCase();
@@ -446,8 +490,10 @@ export async function runHunter() {
       console.error('[hunter] Talent.com Italy scrape failed', e);
     }
 
-    const uniqueRaw = dedupeRawJobs(allRaw);
+    const filteredRaw = allRaw.filter((job) => !isGenericPageTitle(job.title));
+    const uniqueRaw = dedupeRawJobs(filteredRaw);
     console.log('[hunter] total raw scraped items:', allRaw.length);
+    console.log('[hunter] after filtering generic pages:', filteredRaw.length);
     console.log('[hunter] unique items after dedupe:', uniqueRaw.length);
 
     for (const raw of uniqueRaw) {
