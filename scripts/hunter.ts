@@ -9,6 +9,10 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_KEY;
 const geminiApiKey = process.env.GEMINI_API_KEY;
 
+// Hard safety limits so free-tier Gemini quota and GitHub runner time are respected
+const MAX_GEMINI_CALLS_PER_RUN = 15; // keep well below the 20 free-tier limit
+const MAX_ITEMS_PER_RUN = 150; // limit deep scraping and processing per run
+
 if (!supabaseUrl || !supabaseServiceKey) {
   throw new Error('SUPABASE_URL and SUPABASE_KEY must be set');
 }
@@ -39,6 +43,9 @@ const geminiModel = genAI
     })
   : null;
 
+let geminiCallsThisRun = 0;
+let geminiDisabledForRun = false;
+
 interface RawJob {
   source:
     | 'FINDAPHD'
@@ -65,6 +72,24 @@ interface EnrichedJob {
   isPhD: boolean;
   location: string | null;
   deadline: string | null; // ISO if known
+}
+
+function normalizeDeadline(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+
+  // Accept ISO-like dates only; anything else is treated as unknown to avoid DB errors
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString();
+  }
+
+  return null;
 }
 
 const GENERIC_PAGE_KEYWORDS = [
@@ -128,7 +153,7 @@ function isGenericPageTitle(title: string): boolean {
 }
 
 async function analyzeWithGemini(job: RawJob): Promise<EnrichedJob> {
-  if (!geminiModel) {
+  if (!geminiModel || geminiDisabledForRun || geminiCallsThisRun >= MAX_GEMINI_CALLS_PER_RUN) {
     const text = `${job.title}\n${job.snippet}`.toLowerCase();
     const isPhD = /phd|ph\.d|doctoral|doctorate/.test(text);
     return {
@@ -155,6 +180,7 @@ Title: ${job.title}
 Snippet: ${job.snippet}`;
 
   try {
+    geminiCallsThisRun += 1;
     const res = await geminiModel.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
@@ -192,6 +218,14 @@ Snippet: ${job.snippet}`;
     if (e instanceof Error) {
       console.error('  Error name:', e.name);
       console.error('  Error message:', e.message);
+    }
+
+    // If we hit quota / 429 once, disable Gemini for the rest of this run
+    const status = (e as any)?.status ?? (e as any)?.statusCode;
+    const message = (e as any)?.message || '';
+    if (status === 429 || typeof message === 'string' && message.includes('429 Too Many Requests')) {
+      console.warn('[hunter][AI] Disabling Gemini for the rest of this run due to 429/quota.');
+      geminiDisabledForRun = true;
     }
 
     return {
@@ -459,7 +493,7 @@ async function upsertJob(raw: RawJob, enriched: EnrichedJob) {
       raw.requirements && raw.requirements.length > 0
         ? raw.requirements
         : ['See full description for details.'],
-    deadline: raw.deadline ?? enriched.deadline ?? null,
+    deadline: normalizeDeadline(raw.deadline ?? enriched.deadline ?? null),
     postedAt: new Date().toISOString(),
     applicationLink: raw.url,
     source: raw.source,
@@ -550,6 +584,7 @@ export async function runHunter() {
   const browser = await puppeteer.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    protocolTimeout: 120_000,
   });
 
   try {
@@ -601,11 +636,13 @@ export async function runHunter() {
 
     const filteredRaw = allRaw.filter((job) => !isGenericPageTitle(job.title));
     const uniqueRaw = dedupeRawJobs(filteredRaw);
+    const toProcess = uniqueRaw.slice(0, MAX_ITEMS_PER_RUN);
     console.log('[hunter] total raw scraped items:', allRaw.length);
     console.log('[hunter] after filtering generic pages:', filteredRaw.length);
     console.log('[hunter] unique items after dedupe:', uniqueRaw.length);
+    console.log('[hunter] processing up to', MAX_ITEMS_PER_RUN, 'items this run; actual:', toProcess.length);
 
-    for (let raw of uniqueRaw) {
+    for (let raw of toProcess) {
       try {
         raw = await enrichRawJobWithPage(page, raw);
 
