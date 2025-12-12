@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { supabase } from '../lib/supabase';
 import type { JobOpportunity } from '../lib/database.types';
@@ -11,6 +12,7 @@ export default function Jobs() {
   const [query, setQuery] = useState('');
   const [remoteOnly, setRemoteOnly] = useState(false);
   const pageSize = 12;
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function loadJobs() {
@@ -174,10 +176,7 @@ export default function Jobs() {
                     return (
                       <article
                         key={job.id}
-                        onClick={() =>
-                          job.applicationLink &&
-                          window.open(job.applicationLink as string, '_blank', 'noopener')
-                        }
+                        onClick={() => navigate(`/jobs/${job.id}`)}
                         className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between cursor-pointer"
                       >
                         <div>

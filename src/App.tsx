@@ -10,6 +10,8 @@ import Contact from './pages/Contact';
 import ItalyCoursesPage from './pages/ItalyCourses';
 import Jobs from './pages/Jobs';
 import PhdPositions from './pages/PhdPositions';
+import PhdDetail from './pages/PhdDetail';
+import JobDetail from './pages/JobDetail';
 
 function App() {
   return (
@@ -25,7 +27,9 @@ function App() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/italy-courses" element={<ItalyCoursesPage />} />
         <Route path="/phd" element={<PhdPositions />} />
+        <Route path="/phd/:id" element={<PhdDetail />} />
         <Route path="/jobs" element={<Jobs />} />
+        <Route path="/jobs/:id" element={<JobDetail />} />
       </Routes>
     </BrowserRouter>
   );

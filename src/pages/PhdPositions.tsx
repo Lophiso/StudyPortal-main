@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { supabase } from '../lib/supabase';
 import type { JobOpportunity } from '../lib/database.types';
@@ -101,6 +102,7 @@ export default function PhdPositions() {
   const [activeKeyword, setActiveKeyword] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const pageSize = 12;
+  const navigate = useNavigate();
 
   const keywordChips = ['AI / Data', 'Climate', 'Europe', 'Remote'];
 
@@ -328,10 +330,7 @@ export default function PhdPositions() {
                     return (
                       <article
                         key={job.id}
-                        onClick={() =>
-                          job.applicationLink &&
-                          window.open(job.applicationLink as string, '_blank', 'noopener')
-                        }
+                        onClick={() => navigate(`/phd/${job.id}`)}
                         className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between cursor-pointer"
                       >
                         <div>
