@@ -22,6 +22,29 @@ const ARTICLE_TITLE_KEYWORDS = [
   'on being a phd',
   'doing a phd',
   'life as a phd',
+  // obvious non-opportunity / generic site pages
+  'privacy policy',
+  'terms & conditions',
+  'terms and conditions',
+  'contact us',
+  'contact',
+  'about us',
+  'about',
+  'imprint',
+  'legal notice',
+  'cookie policy',
+  'cookies',
+  'data protection',
+  'disclaimer',
+  'sitemap',
+  'accessibility',
+  'login',
+  'log in',
+  'sign in',
+  'register',
+  'create account',
+  'help center',
+  'support center',
 ];
 
 const ARTICLE_DOMAINS = [
@@ -46,6 +69,14 @@ function isArticleLike(job: JobOpportunity): boolean {
   const text = `${title} ${description}`;
 
   if (ARTICLE_TITLE_KEYWORDS.some((kw) => text.includes(kw))) {
+    return true;
+  }
+
+  // Extremely short, generic titles without any mention of PhD/position are unlikely to be real ads
+  const hasPhdKeyword = /phd|ph\.d|doctoral|doctorate|position|studentship|fellowship/i.test(
+    title,
+  );
+  if (!hasPhdKeyword && title.replace(/[^a-z0-9]+/gi, '').length <= 10) {
     return true;
   }
 
