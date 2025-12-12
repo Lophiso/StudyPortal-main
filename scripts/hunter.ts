@@ -51,6 +51,12 @@ interface RawJob {
   url: string;
   title: string;
   snippet: string;
+  // Optional fields populated by deep scraping of the job detail page
+  description?: string;
+  requirements?: string[];
+  city?: string | null;
+  country?: string | null;
+  deadline?: string | null;
 }
 
 interface EnrichedJob {
@@ -446,11 +452,14 @@ async function upsertJob(raw: RawJob, enriched: EnrichedJob) {
     title: enriched.title || raw.title,
     type: isPhDType ? 'PHD' : 'JOB',
     company: enriched.company || 'Unknown',
-    country: enriched.location || 'Unknown',
-    city: 'Unknown',
-    description: raw.snippet,
-    requirements: ['See full description for details.'],
-    deadline: enriched.deadline ?? null,
+    country: raw.country || enriched.location || 'Unknown',
+    city: raw.city || 'Unknown',
+    description: raw.description || raw.snippet,
+    requirements:
+      raw.requirements && raw.requirements.length > 0
+        ? raw.requirements
+        : ['See full description for details.'],
+    deadline: raw.deadline ?? enriched.deadline ?? null,
     postedAt: new Date().toISOString(),
     applicationLink: raw.url,
     source: raw.source,
@@ -462,6 +471,76 @@ async function upsertJob(raw: RawJob, enriched: EnrichedJob) {
 
   if (error) {
     console.error('[hunter] upsert error for', raw.url, error.message);
+  }
+}
+
+async function enrichRawJobWithPage(page: any, job: RawJob): Promise<RawJob> {
+  try {
+    await page.goto(job.url, { waitUntil: 'networkidle2', timeout: 60_000 });
+
+    const description: string | null = await page.evaluate(() => {
+      const selectors = ['article', 'main', '.job-description', '.description', '.job-body', '.content'];
+
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el && el.textContent && el.textContent.trim().length > 200) {
+          return el.textContent.trim();
+        }
+      }
+
+      const bodyText = document.body?.innerText || '';
+      return bodyText.trim().slice(0, 8000) || null;
+    });
+
+    const requirements: string[] = await page.evaluate(() => {
+      const items = Array.from(document.querySelectorAll('ul li')) as HTMLLIElement[];
+      const texts = items
+        .map((li) => li.innerText.trim())
+        .filter((t) => t.length > 0 && t.length < 400);
+      return texts.slice(0, 12);
+    });
+
+    const meta: { city: string | null; country: string | null; deadline: string | null } =
+      await page.evaluate(() => {
+        const bodyText = (document.body?.innerText || '').replace(/\s+/g, ' ');
+
+        let deadline: string | null = null;
+        const deadlineMatch =
+          bodyText.match(/Deadline:?\s*([^\.]{5,60})/i) ||
+          bodyText.match(/Closing date:?\s*([^\.]{5,60})/i);
+        if (deadlineMatch) {
+          deadline = deadlineMatch[1].trim();
+        }
+
+        let city: string | null = null;
+        let country: string | null = null;
+        const locMatch = bodyText.match(/Location:?\s*([^\.]{5,80})/i);
+        if (locMatch) {
+          const parts = locMatch[1].split(',').map((p) => p.trim());
+          if (parts.length === 1) {
+            country = parts[0] || null;
+          } else if (parts.length >= 2) {
+            city = parts[0] || null;
+            country = parts[parts.length - 1] || null;
+          }
+        }
+
+        return { city, country, deadline };
+      });
+
+    const enriched: RawJob = {
+      ...job,
+      description: description || job.description,
+      requirements: requirements.length > 0 ? requirements : job.requirements,
+      city: meta.city ?? job.city ?? null,
+      country: meta.country ?? job.country ?? null,
+      deadline: meta.deadline ?? job.deadline ?? null,
+    };
+
+    return enriched;
+  } catch (e) {
+    console.error('[hunter] Failed to enrich job page', job.url, e);
+    return job;
   }
 }
 
@@ -526,9 +605,16 @@ export async function runHunter() {
     console.log('[hunter] after filtering generic pages:', filteredRaw.length);
     console.log('[hunter] unique items after dedupe:', uniqueRaw.length);
 
-    for (const raw of uniqueRaw) {
+    for (let raw of uniqueRaw) {
       try {
-        const enriched = await analyzeWithGemini(raw);
+        raw = await enrichRawJobWithPage(page, raw);
+
+        const geminiInput: RawJob = {
+          ...raw,
+          snippet: raw.description || raw.snippet,
+        };
+
+        const enriched = await analyzeWithGemini(geminiInput);
         await upsertJob(raw, enriched);
       } catch (e) {
         console.error('[hunter] failed to process job with Gemini, falling back to basic upsert', raw.url, e);
