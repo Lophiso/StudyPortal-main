@@ -11,7 +11,7 @@ const geminiApiKey = process.env.GEMINI_API_KEY;
 
 // Hard safety limits so free-tier Gemini quota and GitHub runner time are respected
 const MAX_GEMINI_CALLS_PER_RUN = 15; // keep well below the 20 free-tier limit
-const MAX_ITEMS_PER_RUN = 150; // limit deep scraping and processing per run
+const MAX_ITEMS_PER_RUN = 60; // keep CI runs short by limiting deep-scraped items per run
 
 if (!supabaseUrl || !supabaseServiceKey) {
   throw new Error('SUPABASE_URL and SUPABASE_KEY must be set');
@@ -92,6 +92,30 @@ function normalizeDeadline(raw: string | null | undefined): string | null {
   return null;
 }
 
+function normalizeJobTitle(raw: string): string {
+  let title = (raw || '').replace(/\s+/g, ' ').trim();
+  if (!title) return 'Untitled position';
+
+  // Remove relative age markers like "19d", "2 days ago"
+  title = title.replace(/\b\d+\s*(d|days? ago)\b/gi, '').trim();
+
+  // For long titles, try to cut off at first salary or long location tail
+  title = title.replace(/\b\$?\d[\d,]*(?:\s*(USD|EUR|GBP|CAD|AUD))?.*$/i, '').trim();
+
+  // Collapse repeated spaces and commas
+  title = title.replace(/\s*,\s*/g, ', ').replace(/\s+/g, ' ').trim();
+
+  // Hard cap to 120 chars, cut at last separator if possible
+  const MAX_LEN = 120;
+  if (title.length > MAX_LEN) {
+    const cut = title.slice(0, MAX_LEN);
+    const lastSep = Math.max(cut.lastIndexOf('|'), cut.lastIndexOf('-'), cut.lastIndexOf(','));
+    title = (lastSep > 40 ? cut.slice(0, lastSep) : cut).trim();
+  }
+
+  return title;
+}
+
 const GENERIC_PAGE_KEYWORDS = [
   'privacy policy',
   'terms & conditions',
@@ -153,89 +177,17 @@ function isGenericPageTitle(title: string): boolean {
 }
 
 async function analyzeWithGemini(job: RawJob): Promise<EnrichedJob> {
-  if (!geminiModel || geminiDisabledForRun || geminiCallsThisRun >= MAX_GEMINI_CALLS_PER_RUN) {
-    const text = `${job.title}\n${job.snippet}`.toLowerCase();
-    const isPhD = /phd|ph\.d|doctoral|doctorate/.test(text);
-    return {
-      title: job.title,
-      company: null,
-      isPhD,
-      location: null,
-      deadline: null,
-    };
-  }
-
-  const prompt = `You are helping to normalize job and PhD opportunities for a database.
-From the following text, extract:
-- title: cleaned title string
-- company: employer or university (string or null)
-- isPhD: boolean (true if clearly a PhD / doctoral opportunity)
-- location: city and country if possible (string or null)
-- deadline: application deadline as ISO8601 (YYYY-MM-DD) if present, else null.
-
-Return JSON only.
-
-Text:
-Title: ${job.title}
-Snippet: ${job.snippet}`;
-
-  try {
-    geminiCallsThisRun += 1;
-    const res = await geminiModel.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    });
-
-    const text = res.response?.text();
-    if (!text) {
-      console.error('[hunter][AI ERROR] Empty response text from Gemini for', job.url);
-      return {
-        title: job.title,
-        company: null,
-        isPhD: false,
-        location: null,
-        deadline: null,
-      };
-    }
-
-    const parsed = JSON.parse(text) as Partial<EnrichedJob>;
-    const result: EnrichedJob = {
-      title: parsed.title ?? job.title,
-      company: parsed.company ?? null,
-      isPhD: Boolean(parsed.isPhD),
-      location: parsed.location ?? null,
-      deadline: parsed.deadline ?? null,
-    };
-
-    console.log(
-      '[hunter][AI SUCCESS] Extracted:',
-      JSON.stringify({ title: result.title, isPhD: result.isPhD, location: result.location }, null, 2),
-    );
-
-    return result;
-  } catch (e: any) {
-    console.error('[hunter][AI ERROR] Gemini request failed for', job.url);
-    console.error('  Error object:', e);
-    if (e instanceof Error) {
-      console.error('  Error name:', e.name);
-      console.error('  Error message:', e.message);
-    }
-
-    // If we hit quota / 429 once, disable Gemini for the rest of this run
-    const status = (e as any)?.status ?? (e as any)?.statusCode;
-    const message = (e as any)?.message || '';
-    if (status === 429 || typeof message === 'string' && message.includes('429 Too Many Requests')) {
-      console.warn('[hunter][AI] Disabling Gemini for the rest of this run due to 429/quota.');
-      geminiDisabledForRun = true;
-    }
-
-    return {
-      title: job.title,
-      company: null,
-      isPhD: false,
-      location: null,
-      deadline: null,
-    };
-  }
+  // For now, avoid calling Gemini during ingestion to preserve free-tier quota
+  // for detail-page summaries. Use a simple heuristic instead.
+  const text = `${job.title}\n${job.snippet}`.toLowerCase();
+  const isPhD = /phd|ph\.d|doctoral|doctorate/.test(text);
+  return {
+    title: job.title,
+    company: null,
+    isPhD,
+    location: null,
+    deadline: null,
+  };
 }
 
 async function scrapeFindAPhD(page: any): Promise<RawJob[]> {
@@ -483,7 +435,7 @@ async function upsertJob(raw: RawJob, enriched: EnrichedJob) {
   const isPhDType = enriched.isPhD || phdSources.has(raw.source);
 
   const payload: any = {
-    title: enriched.title || raw.title,
+    title: normalizeJobTitle(enriched.title || raw.title),
     type: isPhDType ? 'PHD' : 'JOB',
     company: enriched.company || 'Unknown',
     country: raw.country || enriched.location || 'Unknown',
@@ -510,156 +462,22 @@ async function upsertJob(raw: RawJob, enriched: EnrichedJob) {
 
 async function enrichRawJobWithPage(page: any, job: RawJob): Promise<RawJob> {
   try {
-    await page.goto(job.url, { waitUntil: 'networkidle2', timeout: 60_000 });
+    await page.goto(job.url, { waitUntil: 'networkidle2', timeout: 30_000 });
 
     const description: string | null = await page.evaluate(() => {
       const selectors = ['article', 'main', '.job-description', '.description', '.job-body', '.content'];
 
       for (const sel of selectors) {
-        const el = document.querySelector(sel);
-        if (el && el.textContent && el.textContent.trim().length > 200) {
-          return el.textContent.trim();
-        }
-      }
-
-      const bodyText = document.body?.innerText || '';
-      return bodyText.trim().slice(0, 8000) || null;
-    });
-
-    const requirements: string[] = await page.evaluate(() => {
-      const items = Array.from(document.querySelectorAll('ul li')) as HTMLLIElement[];
-      const texts = items
-        .map((li) => li.innerText.trim())
-        .filter((t) => t.length > 0 && t.length < 400);
-      return texts.slice(0, 12);
-    });
-
-    const meta: { city: string | null; country: string | null; deadline: string | null } =
-      await page.evaluate(() => {
-        const bodyText = (document.body?.innerText || '').replace(/\s+/g, ' ');
-
-        let deadline: string | null = null;
-        const deadlineMatch =
-          bodyText.match(/Deadline:?\s*([^\.]{5,60})/i) ||
-          bodyText.match(/Closing date:?\s*([^\.]{5,60})/i);
-        if (deadlineMatch) {
-          deadline = deadlineMatch[1].trim();
-        }
-
-        let city: string | null = null;
-        let country: string | null = null;
-        const locMatch = bodyText.match(/Location:?\s*([^\.]{5,80})/i);
-        if (locMatch) {
-          const parts = locMatch[1].split(',').map((p) => p.trim());
-          if (parts.length === 1) {
-            country = parts[0] || null;
-          } else if (parts.length >= 2) {
-            city = parts[0] || null;
-            country = parts[parts.length - 1] || null;
-          }
-        }
-
-        return { city, country, deadline };
-      });
-
-    const enriched: RawJob = {
-      ...job,
-      description: description || job.description,
-      requirements: requirements.length > 0 ? requirements : job.requirements,
-      city: meta.city ?? job.city ?? null,
-      country: meta.country ?? job.country ?? null,
-      deadline: meta.deadline ?? job.deadline ?? null,
-    };
-
-    return enriched;
-  } catch (e) {
-    console.error('[hunter] Failed to enrich job page', job.url, e);
-    return job;
-  }
-}
-
-export async function runHunter() {
-  console.log('[hunter] starting job hunter bot');
-
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    protocolTimeout: 120_000,
-  });
-
-  try {
-    const page = await browser.newPage();
-
-    const allRaw: RawJob[] = [];
-
-    try {
-      allRaw.push(...(await scrapeFindAPhD(page)));
-    } catch (e) {
-      console.error('[hunter] FindAPhD scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await scrapeWeWorkRemotely(page)));
-    } catch (e) {
-      console.error('[hunter] WWR scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await huntPhdGermany(page)));
-    } catch (e) {
-      console.error('[hunter] DAAD Germany scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await huntPhdNetherlands(page)));
-    } catch (e) {
-      console.error('[hunter] AcademicTransfer NL scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await huntPhdCanada(page)));
-    } catch (e) {
-      console.error('[hunter] University Affairs Canada scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await huntPhdAustralia(page)));
-    } catch (e) {
-      console.error('[hunter] THE Australia scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await huntItalianTech(page)));
-    } catch (e) {
-      console.error('[hunter] Talent.com Italy scrape failed', e);
-    }
-
-    const filteredRaw = allRaw.filter((job) => !isGenericPageTitle(job.title));
-    const uniqueRaw = dedupeRawJobs(filteredRaw);
-    const toProcess = uniqueRaw.slice(0, MAX_ITEMS_PER_RUN);
+{{ ... }
     console.log('[hunter] total raw scraped items:', allRaw.length);
     console.log('[hunter] after filtering generic pages:', filteredRaw.length);
     console.log('[hunter] unique items after dedupe:', uniqueRaw.length);
-    console.log('[hunter] processing up to', MAX_ITEMS_PER_RUN, 'items this run; actual:', toProcess.length);
+    console.log('[hunter] processing up to', 50, 'items this run; actual:', toProcess.length);
 
-    for (let raw of toProcess) {
-      try {
-        raw = await enrichRawJobWithPage(page, raw);
-
-        const geminiInput: RawJob = {
-          ...raw,
-          snippet: raw.description || raw.snippet,
-        };
-
-        const enriched = await analyzeWithGemini(geminiInput);
-        await upsertJob(raw, enriched);
-      } catch (e) {
-        console.error('[hunter] failed to process job with Gemini, falling back to basic upsert', raw.url, e);
-
-        const fallback: EnrichedJob = {
-          title: raw.title,
-          company: null,
-          isPhD: /phd|ph\.d|doctoral|doctorate/i.test(`${raw.title} ${raw.snippet}`),
+    for (let index = 0; index < toProcess.length; index++) {
+      let raw = toProcess[index];
+      if (index % 10 === 0) {
+        console.log(`[hunter] processing job ${index + 1} / ${toProcess.length}`);
           location: null,
           deadline: null,
         };
