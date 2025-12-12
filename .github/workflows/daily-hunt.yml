@@ -1,4 +1,4 @@
-name: Daily AI Hunter
+name: Daily Job Hunter
 
 on:
   schedule:
@@ -23,9 +23,9 @@ jobs:
           DATABASE_URL: postgresql://user:pass@localhost:5432/db
         run: npm ci
 
-      - name: Run Tavily AI hunter bot
+      - name: Run Puppeteer hunter bot
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-        run: npx tsx scripts/aiHunter.ts
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: npx tsx scripts/hunter.ts
