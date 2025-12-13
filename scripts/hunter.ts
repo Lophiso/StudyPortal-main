@@ -232,9 +232,10 @@ Snippet: ${job.snippet}`;
 
     const language = (parsed.language || '').toLowerCase();
 
-    // For PhD positions we only accept English-language posts. If the language
-    // is known and not English, treat it as OTHER so it is dropped upstream.
-    if (kind === 'PHD' && language && !language.startsWith('en')) {
+    // For PhD positions and PhD-related articles we only accept English-language
+    // content. If the language is known and not English, treat it as OTHER so
+    // it is dropped before reaching Supabase.
+    if ((kind === 'PHD' || kind === 'ARTICLE') && language && !language.startsWith('en')) {
       kind = 'OTHER';
     }
 
