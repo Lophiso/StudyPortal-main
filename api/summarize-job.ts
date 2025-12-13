@@ -59,7 +59,8 @@ Description: ${job.description}
 Requirements: ${(job.requirements || []).join(' | ')}`;
 
     const completion = await groq.chat.completions.create({
-      model: 'llama3-8b-8192',
+      // NOTE: llama3-8b-8192 was decommissioned; use the 70B variant instead.
+      model: 'llama3-70b-8192',
       messages: [
         {
           role: 'system',
