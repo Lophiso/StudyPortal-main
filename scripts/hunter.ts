@@ -187,9 +187,16 @@ async function classifyWithGroq(job: RawJob): Promise<EnrichedJob> {
 
     const prompt = `You classify web pages from academic and job sites.
 
-Return JSON with fields: title, kind.
+Return a single JSON object with fields: title, kind, language.
 
-kind MUST be exactly one of: "PHD", "JOB", "ARTICLE", "OTHER".
+- kind MUST be exactly one of: "PHD", "JOB", "ARTICLE", "OTHER".
+- language MUST be a lowercase ISO 639-1 code like "en", "de", "it".
+
+Special rules:
+- If the page is a genuine PhD / doctoral POSITION, use kind = "PHD".
+- If it is a PhD-related ARTICLE, blog or advice piece, use kind = "ARTICLE".
+- If it is an industry or non-academic job, use kind = "JOB".
+- Otherwise use kind = "OTHER".
 
 URL: ${job.url}
 Title: ${job.title}
@@ -211,17 +218,25 @@ Snippet: ${job.snippet}`;
     });
 
     const raw = completion.choices?.[0]?.message?.content || '{}';
-    let parsed: { title?: string; kind?: HunterKind } = {};
+    let parsed: { title?: string; kind?: HunterKind; language?: string } = {};
     try {
       parsed = JSON.parse(raw);
     } catch {
       parsed = {};
     }
 
-    const kind: HunterKind =
+    let kind: HunterKind =
       parsed.kind === 'PHD' || parsed.kind === 'JOB' || parsed.kind === 'ARTICLE' || parsed.kind === 'OTHER'
         ? parsed.kind
         : 'OTHER';
+
+    const language = (parsed.language || '').toLowerCase();
+
+    // For PhD positions we only accept English-language posts. If the language
+    // is known and not English, treat it as OTHER so it is dropped upstream.
+    if (kind === 'PHD' && language && !language.startsWith('en')) {
+      kind = 'OTHER';
+    }
 
     const isPhD = kind === 'PHD';
     const isPhdArticle = kind === 'ARTICLE';
