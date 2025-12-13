@@ -2,6 +2,7 @@ import 'dotenv/config';
 import puppeteer from 'puppeteer';
 import { createClient } from '@supabase/supabase-js';
 import Groq from 'groq-sdk';
+import { searchWeb } from '../src/lib/services/searcher';
 
 // Env vars: for GitHub Actions, set these as repository secrets
 // SUPABASE_URL, SUPABASE_KEY (service role), GROQ_API_KEY
@@ -30,7 +31,9 @@ interface RawJob {
     | 'ACADEMICTRANSFER_NL'
     | 'UAFF_CANADA'
     | 'THE_AUSTRALIA'
-    | 'TALENT_IT';
+    | 'TALENT_IT'
+    | 'SEARCH_PHD'
+    | 'SEARCH_JOB';
   url: string;
   title: string;
   snippet: string;
@@ -457,47 +460,102 @@ async function huntPhdAustralia(page: any): Promise<RawJob[]> {
   return jobs;
 }
 
-async function huntItalianTech(page: any): Promise<RawJob[]> {
-  const base = 'https://it.talent.com/jobs';
-  const queries = [
-    'k=Cloud+Computing&l=Italy',
-    'k=DevOps&l=Italy',
-    'k=AI+Engineer&l=Italy',
-    'k=Web+Developer&l=Italy',
-    'k=Data+Analyst&l=Italy',
+async function huntWithSearchEngine(): Promise<RawJob[]> {
+  const results: RawJob[] = [];
+
+  type DomainConfig = {
+    name: string;
+    phdQuery: string;
+    jobQuery: string;
+  };
+
+  const domains: DomainConfig[] = [
+    {
+      name: 'Computer Science & Software Engineering',
+      phdQuery: 'PhD positions Computer Science and Software Engineering Europe 2025',
+      jobQuery: 'Junior Software Engineer jobs remote Italy',
+    },
+    {
+      name: 'Artificial Intelligence, Machine Learning & NLP',
+      phdQuery: 'PhD positions Artificial Intelligence Machine Learning NLP Europe 2025',
+      jobQuery: 'Junior Machine Learning Engineer jobs remote Italy',
+    },
+    {
+      name: 'Data Science, Big Data & Analytics',
+      phdQuery: 'PhD positions Data Science Big Data Analytics Europe 2025',
+      jobQuery: 'Junior Data Scientist jobs remote Italy',
+    },
+    {
+      name: 'Cybersecurity & Information Privacy',
+      phdQuery: 'PhD positions Cybersecurity Information Privacy Europe 2025',
+      jobQuery: 'Junior Security Analyst jobs remote Italy',
+    },
+    {
+      name: 'Cloud Computing, DevOps & SRE',
+      phdQuery: 'PhD positions Cloud Computing DevOps SRE Europe 2025',
+      jobQuery: 'Junior DevOps Engineer jobs remote Italy',
+    },
+    {
+      name: 'Telecommunications, 5G & Networking',
+      phdQuery: 'PhD positions Telecommunications 5G Networking Europe 2025',
+      jobQuery: 'Junior Network Engineer jobs remote Italy',
+    },
+    {
+      name: 'Autonomous Systems, Robotics & Control Theory',
+      phdQuery: 'PhD positions Autonomous Systems Robotics Control Theory Europe 2025',
+      jobQuery: 'Junior Robotics Engineer jobs remote Italy',
+    },
+    {
+      name: 'Internet of Things (IoT) & Embedded Systems',
+      phdQuery: 'PhD positions Internet of Things IoT Embedded Systems Europe 2025',
+      jobQuery: 'Junior Embedded Systems Engineer jobs remote Italy',
+    },
+    {
+      name: 'Mathematics & Computational Science',
+      phdQuery: 'PhD positions Mathematics Computational Science Europe 2025',
+      jobQuery: 'Junior Quantitative Analyst jobs remote Italy',
+    },
+    {
+      name: 'Blockchain & Cryptography',
+      phdQuery: 'PhD positions Blockchain Cryptography Europe 2025',
+      jobQuery: 'Junior Blockchain Engineer jobs remote Italy',
+    },
   ];
 
-  const all: RawJob[] = [];
-
-  for (const q of queries) {
-    const url = `${base}?${q}`;
-    console.log('[hunter] scraping Talent.com Italy jobs:', url);
-
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 60_000 });
-
-    const jobs: RawJob[] = await page.$$eval('a', (anchors: any[]) => {
-      const items: any[] = [];
-      for (const a of anchors) {
-        const href = (a as HTMLAnchorElement).href;
-        const text = (a.textContent || '').trim();
-        if (!href || !text) continue;
-        if (!href.includes('talent.com')) continue;
-
-        items.push({
-          source: 'TALENT_IT',
-          url: href,
-          title: text,
-          snippet: text,
+  for (const domain of domains) {
+    try {
+      const phdResults = await searchWeb(domain.phdQuery);
+      for (const item of phdResults) {
+        if (!item.link || !item.title) continue;
+        results.push({
+          source: 'SEARCH_PHD',
+          url: item.link,
+          title: item.title,
+          snippet: item.snippet || item.title,
         });
       }
-      return items;
-    });
+    } catch (e) {
+      console.error('[hunter] DuckDuckGo PhD search failed for domain', domain.name, e);
+    }
 
-    console.log('[hunter] Talent.com Italy items for query', q, ':', jobs.length);
-    all.push(...jobs);
+    try {
+      const jobResults = await searchWeb(domain.jobQuery);
+      for (const item of jobResults) {
+        if (!item.link || !item.title) continue;
+        results.push({
+          source: 'SEARCH_JOB',
+          url: item.link,
+          title: item.title,
+          snippet: item.snippet || item.title,
+        });
+      }
+    } catch (e) {
+      console.error('[hunter] DuckDuckGo job search failed for domain', domain.name, e);
+    }
   }
 
-  return all;
+  console.log('[hunter] DuckDuckGo search-produced items:', results.length);
+  return results;
 }
 
 function dedupeRawJobs(jobs: RawJob[]): RawJob[] {
@@ -626,45 +684,9 @@ export async function runHunter() {
     const allRaw: RawJob[] = [];
 
     try {
-      allRaw.push(...(await scrapeFindAPhD(page)));
+      allRaw.push(...(await huntWithSearchEngine()));
     } catch (e) {
-      console.error('[hunter] FindAPhD scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await scrapeWeWorkRemotely(page)));
-    } catch (e) {
-      console.error('[hunter] WWR scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await huntPhdGermany(page)));
-    } catch (e) {
-      console.error('[hunter] DAAD Germany scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await huntPhdNetherlands(page)));
-    } catch (e) {
-      console.error('[hunter] AcademicTransfer NL scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await huntPhdCanada(page)));
-    } catch (e) {
-      console.error('[hunter] University Affairs Canada scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await huntPhdAustralia(page)));
-    } catch (e) {
-      console.error('[hunter] THE Australia scrape failed', e);
-    }
-
-    try {
-      allRaw.push(...(await huntItalianTech(page)));
-    } catch (e) {
-      console.error('[hunter] Talent.com Italy scrape failed', e);
+      console.error('[hunter] search-engine based hunt failed', e);
     }
 
     const filteredRaw = allRaw.filter((job) => !isGenericPageTitle(job.title));
