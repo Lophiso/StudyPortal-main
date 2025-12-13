@@ -15,7 +15,7 @@ export async function searchWeb(query: string): Promise<WebSearchResult[]> {
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
   const response = await search(query, {
-    safeSearch: 'moderate',
+    // Use library defaults for safeSearch; locale keeps results focused.
     locale: 'en-us',
   });
 
