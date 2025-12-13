@@ -1,18 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import groq from '../src/lib/services/groq';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_KEY;
-const geminiApiKey = process.env.GEMINI_API_KEY;
 
 if (!supabaseUrl || !supabaseServiceKey) {
   throw new Error('SUPABASE_URL and SUPABASE_KEY must be set');
 }
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -41,14 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const job = data as any;
 
-  if (!genAI || !geminiApiKey) {
-    res.status(200).json({ summary: null });
-    return;
-  }
-
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
     const kindLabel = type === 'PHD' ? 'PhD / doctoral position' : 'job opportunity';
 
     const prompt = `You are helping summarize a ${kindLabel} for a student-facing portal.
@@ -66,11 +56,21 @@ Location: ${job.city}, ${job.country}
 Description: ${job.description}
 Requirements: ${(job.requirements || []).join(' | ')}`;
 
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    const completion = await groq.chat.completions.create({
+      model: 'llama3-8b-8192',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a helpful assistant that writes clear, student-friendly summaries of academic and industry opportunities.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.5,
+      max_tokens: 512,
     });
 
-    const text = result.response.text();
+    const text = completion.choices?.[0]?.message?.content || null;
 
     res.status(200).json({ summary: text });
   } catch (e) {
