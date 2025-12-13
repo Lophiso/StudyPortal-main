@@ -1,50 +1,26 @@
 import 'dotenv/config';
 import puppeteer from 'puppeteer';
 import { createClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 
 // Env vars: for GitHub Actions, set these as repository secrets
-// SUPABASE_URL, SUPABASE_KEY (service role), GEMINI_API_KEY
+// SUPABASE_URL, SUPABASE_KEY (service role), GROQ_API_KEY
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_KEY;
-const geminiApiKey = process.env.GEMINI_API_KEY;
 
-// Hard safety limits so free-tier Gemini quota and GitHub runner time are respected
-const MAX_GEMINI_CALLS_PER_RUN = 15; // keep well below the 20 free-tier limit
+// Hard safety limits so GitHub runner time and Groq quota are respected
+const MAX_GROQ_CALLS_PER_RUN = 80;
 const MAX_ITEMS_PER_RUN = 60; // keep CI runs short by limiting deep-scraped items per run
 
 if (!supabaseUrl || !supabaseServiceKey) {
   throw new Error('SUPABASE_URL and SUPABASE_KEY must be set');
 }
-if (!geminiApiKey) {
-  console.warn('[hunter] GEMINI_API_KEY not set, running without AI enrichment');
-}
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
-const geminiModel = genAI
-  ? genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: SchemaType.OBJECT,
-          properties: {
-            title: { type: SchemaType.STRING },
-            company: { type: SchemaType.STRING, nullable: true },
-            isPhD: { type: SchemaType.BOOLEAN },
-            location: { type: SchemaType.STRING, nullable: true },
-            deadline: { type: SchemaType.STRING, nullable: true },
-          },
-          required: ['title', 'isPhD'],
-        },
-      },
-    })
-  : null;
-
-let geminiCallsThisRun = 0;
-let geminiDisabledForRun = false;
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
+let groqCallsThisRun = 0;
+let groqDisabledForRun = false;
 
 interface RawJob {
   source:
@@ -70,6 +46,8 @@ interface EnrichedJob {
   title: string;
   company: string | null;
   isPhD: boolean;
+  isPhdArticle: boolean;
+  isJob: boolean;
   location: string | null;
   deadline: string | null; // ISO if known
 }
@@ -176,18 +154,112 @@ function isGenericPageTitle(title: string): boolean {
   return false;
 }
 
-async function analyzeWithGemini(job: RawJob): Promise<EnrichedJob> {
-  // For now, avoid calling Gemini during ingestion to preserve free-tier quota
-  // for detail-page summaries. Use a simple heuristic instead.
-  const text = `${job.title}\n${job.snippet}`.toLowerCase();
-  const isPhD = /phd|ph\.d|doctoral|doctorate/.test(text);
-  return {
-    title: job.title,
-    company: null,
-    isPhD,
-    location: null,
-    deadline: null,
-  };
+type HunterKind = 'PHD' | 'JOB' | 'ARTICLE' | 'OTHER';
+
+async function classifyWithGroq(job: RawJob): Promise<EnrichedJob> {
+  const text = `${job.title}\n${job.snippet}`;
+
+  if (!process.env.GROQ_API_KEY || groqDisabledForRun || groqCallsThisRun >= MAX_GROQ_CALLS_PER_RUN) {
+    const lower = text.toLowerCase();
+    const isPhD = /phd|ph\.d|doctoral|doctorate/.test(lower);
+    const looksJob = /developer|engineer|software|frontend|backend|full[- ]?stack|data scientist|analyst|manager|intern/.test(
+      lower,
+    );
+    const isArticleLike = /how to |tips|tricks|guide|the importance|why |what i |life as a phd|doing a phd/i.test(
+      lower,
+    );
+
+    const kind: HunterKind = isArticleLike ? 'ARTICLE' : isPhD ? 'PHD' : looksJob ? 'JOB' : 'OTHER';
+
+    return {
+      title: job.title,
+      company: null,
+      isPhD: kind === 'PHD',
+      isPhdArticle: kind === 'ARTICLE',
+      isJob: kind === 'JOB',
+      location: null,
+      deadline: null,
+    };
+  }
+
+  try {
+    groqCallsThisRun += 1;
+
+    const prompt = `You classify web pages from academic and job sites.
+
+Return JSON with fields: title, kind.
+
+kind MUST be exactly one of: "PHD", "JOB", "ARTICLE", "OTHER".
+
+URL: ${job.url}
+Title: ${job.title}
+Snippet: ${job.snippet}`;
+
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a strict classifier that labels pages as PHD, JOB, ARTICLE, or OTHER and returns compact JSON.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0,
+      max_tokens: 128,
+      response_format: { type: 'json_object' },
+    });
+
+    const raw = completion.choices?.[0]?.message?.content || '{}';
+    let parsed: { title?: string; kind?: HunterKind } = {};
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = {};
+    }
+
+    const kind: HunterKind =
+      parsed.kind === 'PHD' || parsed.kind === 'JOB' || parsed.kind === 'ARTICLE' || parsed.kind === 'OTHER'
+        ? parsed.kind
+        : 'OTHER';
+
+    const isPhD = kind === 'PHD';
+    const isPhdArticle = kind === 'ARTICLE';
+    const isJob = kind === 'JOB';
+
+    return {
+      title: parsed.title || job.title,
+      company: null,
+      isPhD,
+      isPhdArticle,
+      isJob,
+      location: null,
+      deadline: null,
+    };
+  } catch (e) {
+    console.error('[hunter] Groq classification failed, falling back to heuristic', e);
+    groqDisabledForRun = true;
+
+    const lower = text.toLowerCase();
+    const isPhD = /phd|ph\.d|doctoral|doctorate/.test(lower);
+    const looksJob = /developer|engineer|software|frontend|backend|full[- ]?stack|data scientist|analyst|manager|intern/.test(
+      lower,
+    );
+    const isArticleLike = /how to |tips|tricks|guide|the importance|why |what i |life as a phd|doing a phd/i.test(
+      lower,
+    );
+    const kind: HunterKind = isArticleLike ? 'ARTICLE' : isPhD ? 'PHD' : looksJob ? 'JOB' : 'OTHER';
+
+    return {
+      title: job.title,
+      company: null,
+      isPhD: kind === 'PHD',
+      isPhdArticle: kind === 'ARTICLE',
+      isJob: kind === 'JOB',
+      location: null,
+      deadline: null,
+    };
+  }
 }
 
 async function scrapeFindAPhD(page: any): Promise<RawJob[]> {
@@ -424,19 +496,12 @@ function dedupeRawJobs(jobs: RawJob[]): RawJob[] {
 }
 
 async function upsertJob(raw: RawJob, enriched: EnrichedJob) {
-  const phdSources = new Set<RawJob['source']>([
-    'FINDAPHD',
-    'DAAD_GERMANY',
-    'ACADEMICTRANSFER_NL',
-    'UAFF_CANADA',
-    'THE_AUSTRALIA',
-  ]);
-
-  const isPhDType = enriched.isPhD || phdSources.has(raw.source);
-
   const payload: any = {
     title: normalizeJobTitle(enriched.title || raw.title),
-    type: isPhDType ? 'PHD' : 'JOB',
+    type: enriched.isPhD ? 'PHD' : 'JOB',
+    isPhd: enriched.isPhD,
+    isPhdArticle: enriched.isPhdArticle,
+    isJob: enriched.isJob,
     company: enriched.company || 'Unknown',
     country: raw.country || enriched.location || 'Unknown',
     city: raw.city || 'Unknown',
@@ -603,29 +668,22 @@ export async function runHunter() {
       try {
         raw = await enrichRawJobWithPage(page, raw);
 
-        const geminiInput: RawJob = {
+        const classifyInput: RawJob = {
           ...raw,
           snippet: raw.description || raw.snippet,
         };
 
-        const enriched = await analyzeWithGemini(geminiInput);
+        const enriched = await classifyWithGroq(classifyInput);
+
+        // Skip obvious non-opportunities
+        if (!enriched.isPhD && !enriched.isPhdArticle && !enriched.isJob) {
+          console.log('[hunter] skipping non-opportunity', raw.url);
+          continue;
+        }
+
         await upsertJob(raw, enriched);
       } catch (e) {
-        console.error('[hunter] failed to process job with Gemini, falling back to basic upsert', raw.url, e);
-
-        const fallback: EnrichedJob = {
-          title: raw.title,
-          company: null,
-          isPhD: /phd|ph\.d|doctoral|doctorate/i.test(`${raw.title} ${raw.snippet}`),
-          location: null,
-          deadline: null,
-        };
-
-        try {
-          await upsertJob(raw, fallback);
-        } catch (inner) {
-          console.error('[hunter] fallback upsert also failed for', raw.url, inner);
-        }
+        console.error('[hunter] failed to process job with Groq/heuristics', raw.url, e);
       }
     }
 

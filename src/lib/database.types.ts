@@ -100,6 +100,9 @@ export type Database = {
           createdAt: string;
           title: string;
           type: 'PHD' | 'JOB';
+          isPhd: boolean | null;
+          isPhdArticle: boolean | null;
+          isJob: boolean | null;
           company: string;
           country: string;
           city: string;
@@ -115,6 +118,9 @@ export type Database = {
           createdAt?: string;
           title: string;
           type: 'PHD' | 'JOB';
+          isPhd?: boolean | null;
+          isPhdArticle?: boolean | null;
+          isJob?: boolean | null;
           company: string;
           country: string;
           city: string;
@@ -130,6 +136,9 @@ export type Database = {
           createdAt?: string;
           title?: string;
           type?: 'PHD' | 'JOB';
+          isPhd?: boolean | null;
+          isPhdArticle?: boolean | null;
+          isJob?: boolean | null;
           company?: string;
           country?: string;
           city?: string;

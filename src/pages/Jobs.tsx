@@ -21,7 +21,7 @@ export default function Jobs() {
       const { data, error } = await supabase
         .from('JobOpportunity')
         .select('*')
-        .eq('type', 'JOB')
+        .eq('isJob', true)
         .order('postedAt', { ascending: false });
 
       if (error) {

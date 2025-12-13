@@ -114,7 +114,7 @@ export default function PhdPositions() {
       const { data, error } = await supabase
         .from('JobOpportunity')
         .select('*')
-        .eq('type', 'PHD')
+        .eq('isPhd', true)
         .order('postedAt', { ascending: false });
 
       if (error) {
