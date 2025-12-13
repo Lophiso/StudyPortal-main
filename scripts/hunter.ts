@@ -468,16 +468,155 @@ async function enrichRawJobWithPage(page: any, job: RawJob): Promise<RawJob> {
       const selectors = ['article', 'main', '.job-description', '.description', '.job-body', '.content'];
 
       for (const sel of selectors) {
-{{ ... }
+        const el = document.querySelector(sel);
+        if (el && el.textContent && el.textContent.trim().length > 200) {
+          return el.textContent.trim();
+        }
+      }
+
+      const bodyText = document.body?.innerText || '';
+      return bodyText.trim().slice(0, 8000) || null;
+    });
+
+    const requirements: string[] = await page.evaluate(() => {
+      const items = Array.from(document.querySelectorAll('ul li')) as HTMLLIElement[];
+      const texts = items
+        .map((li) => li.innerText.trim())
+        .filter((t) => t.length > 0 && t.length < 400);
+      return texts.slice(0, 12);
+    });
+
+    const meta: { city: string | null; country: string | null; deadline: string | null } =
+      await page.evaluate(() => {
+        const bodyText = (document.body?.innerText || '').replace(/\s+/g, ' ');
+
+        let deadline: string | null = null;
+        const deadlineMatch =
+          bodyText.match(/Deadline:?\s*([^\.]{5,60})/i) ||
+          bodyText.match(/Closing date:?\s*([^\.]{5,60})/i);
+        if (deadlineMatch) {
+          deadline = deadlineMatch[1].trim();
+        }
+
+        let city: string | null = null;
+        let country: string | null = null;
+        const locMatch = bodyText.match(/Location:?\s*([^\.]{5,80})/i);
+        if (locMatch) {
+          const parts = locMatch[1].split(',').map((p) => p.trim());
+          if (parts.length === 1) {
+            country = parts[0] || null;
+          } else if (parts.length >= 2) {
+            city = parts[0] || null;
+            country = parts[parts.length - 1] || null;
+          }
+        }
+
+        return { city, country, deadline };
+      });
+
+    const enriched: RawJob = {
+      ...job,
+      description: description || job.description,
+      requirements: requirements.length > 0 ? requirements : job.requirements,
+      city: meta.city ?? job.city ?? null,
+      country: meta.country ?? job.country ?? null,
+      deadline: meta.deadline ?? job.deadline ?? null,
+    };
+
+    return enriched;
+  } catch (e) {
+    console.error('[hunter] Failed to enrich job page', job.url, e);
+    return job;
+  }
+}
+
+export async function runHunter() {
+  console.log('[hunter] starting job hunter bot');
+
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    protocolTimeout: 120_000,
+  });
+
+  try {
+    const page = await browser.newPage();
+
+    const allRaw: RawJob[] = [];
+
+    try {
+      allRaw.push(...(await scrapeFindAPhD(page)));
+    } catch (e) {
+      console.error('[hunter] FindAPhD scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await scrapeWeWorkRemotely(page)));
+    } catch (e) {
+      console.error('[hunter] WWR scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntPhdGermany(page)));
+    } catch (e) {
+      console.error('[hunter] DAAD Germany scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntPhdNetherlands(page)));
+    } catch (e) {
+      console.error('[hunter] AcademicTransfer NL scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntPhdCanada(page)));
+    } catch (e) {
+      console.error('[hunter] University Affairs Canada scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntPhdAustralia(page)));
+    } catch (e) {
+      console.error('[hunter] THE Australia scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntItalianTech(page)));
+    } catch (e) {
+      console.error('[hunter] Talent.com Italy scrape failed', e);
+    }
+
+    const filteredRaw = allRaw.filter((job) => !isGenericPageTitle(job.title));
+    const uniqueRaw = dedupeRawJobs(filteredRaw);
+    const toProcess = uniqueRaw.slice(0, MAX_ITEMS_PER_RUN);
     console.log('[hunter] total raw scraped items:', allRaw.length);
     console.log('[hunter] after filtering generic pages:', filteredRaw.length);
     console.log('[hunter] unique items after dedupe:', uniqueRaw.length);
-    console.log('[hunter] processing up to', 50, 'items this run; actual:', toProcess.length);
+    console.log('[hunter] processing up to', MAX_ITEMS_PER_RUN, 'items this run; actual:', toProcess.length);
 
     for (let index = 0; index < toProcess.length; index++) {
       let raw = toProcess[index];
       if (index % 10 === 0) {
         console.log(`[hunter] processing job ${index + 1} / ${toProcess.length}`);
+      }
+
+      try {
+        raw = await enrichRawJobWithPage(page, raw);
+
+        const geminiInput: RawJob = {
+          ...raw,
+          snippet: raw.description || raw.snippet,
+        };
+
+        const enriched = await analyzeWithGemini(geminiInput);
+        await upsertJob(raw, enriched);
+      } catch (e) {
+        console.error('[hunter] failed to process job with Gemini, falling back to basic upsert', raw.url, e);
+
+        const fallback: EnrichedJob = {
+          title: raw.title,
+          company: null,
+          isPhD: /phd|ph\.d|doctoral|doctorate/i.test(`${raw.title} ${raw.snippet}`),
           location: null,
           deadline: null,
         };
