@@ -32,8 +32,7 @@ interface RawJob {
     | 'UAFF_CANADA'
     | 'THE_AUSTRALIA'
     | 'TALENT_IT'
-    | 'SEARCH_PHD'
-    | 'SEARCH_JOB';
+    | 'SEARCH_PHD';
   url: string;
   title: string;
   snippet: string;
@@ -463,68 +462,23 @@ async function huntPhdAustralia(page: any): Promise<RawJob[]> {
 async function huntWithSearchEngine(): Promise<RawJob[]> {
   const results: RawJob[] = [];
 
-  type DomainConfig = {
-    name: string;
-    phdQuery: string;
-    jobQuery: string;
-  };
-
-  const domains: DomainConfig[] = [
-    {
-      name: 'Computer Science & Software Engineering',
-      phdQuery: 'PhD positions Computer Science and Software Engineering Europe 2025',
-      jobQuery: 'Junior Software Engineer jobs remote Italy',
-    },
-    {
-      name: 'Artificial Intelligence, Machine Learning & NLP',
-      phdQuery: 'PhD positions Artificial Intelligence Machine Learning NLP Europe 2025',
-      jobQuery: 'Junior Machine Learning Engineer jobs remote Italy',
-    },
-    {
-      name: 'Data Science, Big Data & Analytics',
-      phdQuery: 'PhD positions Data Science Big Data Analytics Europe 2025',
-      jobQuery: 'Junior Data Scientist jobs remote Italy',
-    },
-    {
-      name: 'Cybersecurity & Information Privacy',
-      phdQuery: 'PhD positions Cybersecurity Information Privacy Europe 2025',
-      jobQuery: 'Junior Security Analyst jobs remote Italy',
-    },
-    {
-      name: 'Cloud Computing, DevOps & SRE',
-      phdQuery: 'PhD positions Cloud Computing DevOps SRE Europe 2025',
-      jobQuery: 'Junior DevOps Engineer jobs remote Italy',
-    },
-    {
-      name: 'Telecommunications, 5G & Networking',
-      phdQuery: 'PhD positions Telecommunications 5G Networking Europe 2025',
-      jobQuery: 'Junior Network Engineer jobs remote Italy',
-    },
-    {
-      name: 'Autonomous Systems, Robotics & Control Theory',
-      phdQuery: 'PhD positions Autonomous Systems Robotics Control Theory Europe 2025',
-      jobQuery: 'Junior Robotics Engineer jobs remote Italy',
-    },
-    {
-      name: 'Internet of Things (IoT) & Embedded Systems',
-      phdQuery: 'PhD positions Internet of Things IoT Embedded Systems Europe 2025',
-      jobQuery: 'Junior Embedded Systems Engineer jobs remote Italy',
-    },
-    {
-      name: 'Mathematics & Computational Science',
-      phdQuery: 'PhD positions Mathematics Computational Science Europe 2025',
-      jobQuery: 'Junior Quantitative Analyst jobs remote Italy',
-    },
-    {
-      name: 'Blockchain & Cryptography',
-      phdQuery: 'PhD positions Blockchain Cryptography Europe 2025',
-      jobQuery: 'Junior Blockchain Engineer jobs remote Italy',
-    },
+  const domains: string[] = [
+    'Computer Science & Software Engineering',
+    'Artificial Intelligence, Machine Learning & NLP',
+    'Data Science, Big Data & Analytics',
+    'Cybersecurity & Privacy',
+    'Cloud Computing & DevOps',
+    'Telecommunications & 5G',
+    'Autonomous Systems & Robotics',
+    'Internet of Things (IoT)',
+    'Mathematics & Computational Science',
+    'Blockchain & Cryptography',
   ];
 
   for (const domain of domains) {
+    const query = `PhD positions ${domain} Europe 2025 2026`;
     try {
-      const phdResults = await searchWeb(domain.phdQuery);
+      const phdResults = await searchWeb(query);
       for (const item of phdResults) {
         if (!item.link || !item.title) continue;
         results.push({
@@ -535,26 +489,11 @@ async function huntWithSearchEngine(): Promise<RawJob[]> {
         });
       }
     } catch (e) {
-      console.error('[hunter] DuckDuckGo PhD search failed for domain', domain.name, e);
-    }
-
-    try {
-      const jobResults = await searchWeb(domain.jobQuery);
-      for (const item of jobResults) {
-        if (!item.link || !item.title) continue;
-        results.push({
-          source: 'SEARCH_JOB',
-          url: item.link,
-          title: item.title,
-          snippet: item.snippet || item.title,
-        });
-      }
-    } catch (e) {
-      console.error('[hunter] DuckDuckGo job search failed for domain', domain.name, e);
+      console.error('[hunter] Google search failed for domain', domain, e);
     }
   }
 
-  console.log('[hunter] DuckDuckGo search-produced items:', results.length);
+  console.log('[hunter] search-engine produced PhD items:', results.length);
   return results;
 }
 

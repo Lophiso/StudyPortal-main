@@ -21,8 +21,6 @@
     "@vercel/node": "^5.5.15",
     "cheerio": "^1.0.0-rc.12",
     "dotenv": "^16.4.5",
-    "duck-duck-scrape": "^2.2.7",
-    "fake-useragent": "^1.0.1",
     "groq-sdk": "^0.37.0",
     "lucide-react": "^0.344.0",
     "prisma": "^7.1.0",
