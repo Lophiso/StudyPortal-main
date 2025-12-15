@@ -48,13 +48,11 @@ interface EnrichedJob {
   title: string;
   company: string | null;
   /**
-   * Whether this page actually contains a concrete, currently open opportunity
-   * (e.g. a PhD position) rather than just a generic profile, CV or article.
+   * Whether this page actually contains a concrete, currently open PhD
+   * opportunity rather than just a generic profile, CV or article.
    */
   isOpportunity: boolean;
   isPhD: boolean;
-  isPhdArticle: boolean;
-  isJob: boolean;
   /** Optional cleaned location string (e.g. "Vienna, Austria"). */
   location: string | null;
   /** Optional normalized deadline in ISO-8601 format if known. */
@@ -167,7 +165,7 @@ function isGenericPageTitle(title: string): boolean {
   return false;
 }
 
-type HunterKind = 'PHD' | 'JOB' | 'ARTICLE' | 'OTHER';
+type HunterKind = 'PHD' | 'OTHER';
 
 async function classifyWithGroq(job: RawJob): Promise<EnrichedJob> {
   const text = `${job.title}\n${job.snippet}`;
@@ -175,22 +173,17 @@ async function classifyWithGroq(job: RawJob): Promise<EnrichedJob> {
   if (!process.env.GROQ_API_KEY || groqDisabledForRun || groqCallsThisRun >= MAX_GROQ_CALLS_PER_RUN) {
     const lower = text.toLowerCase();
     const isPhD = /phd|ph\.d|doctoral|doctorate/.test(lower);
-    const looksJob = /developer|engineer|software|frontend|backend|full[- ]?stack|data scientist|analyst|manager|intern/.test(
-      lower,
-    );
-    const isArticleLike = /how to |tips|tricks|guide|the importance|why |what i |life as a phd|doing a phd/i.test(
+    const isClearlyNonVacancy = /cv|curriculum vitae|publications|publication list|alumni|blog|news|ranking|how to |guide/i.test(
       lower,
     );
 
-    const kind: HunterKind = isArticleLike ? 'ARTICLE' : isPhD ? 'PHD' : looksJob ? 'JOB' : 'OTHER';
+    const kind: HunterKind = !isPhD || isClearlyNonVacancy ? 'OTHER' : 'PHD';
 
     return {
       title: job.title,
       company: null,
-      isOpportunity: kind === 'PHD' || kind === 'JOB',
+      isOpportunity: kind === 'PHD',
       isPhD: kind === 'PHD',
-      isPhdArticle: kind === 'ARTICLE',
-      isJob: kind === 'JOB',
       location: null,
       deadline: null,
       generatedTitle: null,
@@ -201,34 +194,31 @@ async function classifyWithGroq(job: RawJob): Promise<EnrichedJob> {
   try {
     groqCallsThisRun += 1;
 
-    const prompt = `You analyze web pages from academic and job sites and perform STRICT opportunity detection and extraction.
+    const prompt = `You are a strict Recruitment Officer. You analyze web pages to decide if they contain a concrete, currently open PhD position.
 
-You MUST return a single JSON object with the following fields:
+Return a single JSON object with the following fields:
 {
   "title": string,                // Best human-readable title for the page as a whole
-  "kind": "PHD" | "JOB" | "ARTICLE" | "OTHER",
+  "kind": "PHD" | "OTHER",
   "language": string,            // lowercase ISO 639-1 code like "en", "de", "it"
-  "isOpportunity": boolean,      // true ONLY if there is at least one concrete, currently open position
-  "generatedTitle": string|null, // Short, clean title for the main opportunity (if any)
-  "cleanedDescription": string|null, // 2-6 sentences describing ONLY the opportunity itself
+  "isOpportunity": boolean,      // true ONLY if there is at least one concrete, currently open PhD position
+  "generatedTitle": string|null, // Short, clean title for the main PhD vacancy (if any)
+  "cleanedDescription": string|null, // 2-6 sentences describing ONLY the PhD vacancy (project, requirements, how to apply)
   "confidence": number           // 0-100 confidence that this is correctly classified
 }
 
 CRITICAL RULES:
-- If the text is mostly a person profile (CV, long biography, publication list, talks, teaching, committees)
-  and does NOT contain a clearly identified, currently open position with some description, DEADLINE or HOW TO APPLY,
-  then set isOpportunity = false and kind = "OTHER" (or "ARTICLE" if it reads like an article).
+- If the text is mostly a professor profile, CV, long biography, publication list, teaching, committees, news, blog posts,
+  conference calls for papers, rankings, or general department descriptions WITHOUT a clearly identified PhD vacancy with
+  some description, deadline OR clear application instructions, then set isOpportunity = false and kind = "OTHER".
 
 - If there is a specific open PhD / doctoral position, set:
   - kind = "PHD"
   - isOpportunity = true
-  - generatedTitle = a concise title like "PhD in Serverless Edge Computing (TU Wien)" (do NOT use generic page titles like "Home" or just the professor name)
+  - generatedTitle = a concise title like "PhD in Serverless Edge Computing (TU Wien)" (do NOT use generic page titles
+    like "Home" or just the professor name)
   - cleanedDescription = ONLY the paragraphs that describe the position, research topic, requirements, funding and how to apply.
     Remove navigation links, news items, unrelated projects, full CVs, publication lists, teaching, etc.
-
-- If there is a non-academic or industry job, set kind = "JOB" and isOpportunity = true and extract only the job description.
-
-- If the page is an article, blog post, advice, conference call for papers, or similar, set kind = "ARTICLE" and isOpportunity = false.
 
 You MUST be conservative: when in doubt, prefer isOpportunity = false.
 
@@ -267,24 +257,19 @@ Snippet: ${job.snippet}`;
       parsed = {};
     }
 
-    let kind: HunterKind =
-      parsed.kind === 'PHD' || parsed.kind === 'JOB' || parsed.kind === 'ARTICLE' || parsed.kind === 'OTHER'
-        ? parsed.kind
-        : 'OTHER';
+    let kind: HunterKind = parsed.kind === 'PHD' || parsed.kind === 'OTHER' ? parsed.kind : 'OTHER';
 
     const language = (parsed.language || '').toLowerCase();
 
-    // For PhD positions and PhD-related articles we only accept English-language
-    // content. If the language is known and not English, treat it as OTHER so
-    // it is dropped before reaching Supabase.
-    if ((kind === 'PHD' || kind === 'ARTICLE') && language && !language.startsWith('en')) {
+    // For PhD positions we only accept English-language content. If the
+    // language is known and not English, treat it as OTHER so it is dropped
+    // before reaching Supabase.
+    if (kind === 'PHD' && language && !language.startsWith('en')) {
       kind = 'OTHER';
     }
 
     const isPhD = kind === 'PHD';
-    const isPhdArticle = kind === 'ARTICLE';
-    const isJob = kind === 'JOB';
-    const isOpportunity = Boolean(parsed.isOpportunity && (isPhD || isJob));
+    const isOpportunity = Boolean(parsed.isOpportunity && isPhD);
 
     const generatedTitle = (parsed.generatedTitle || '').trim() || null;
     const cleanedDescription = (parsed.cleanedDescription || '').trim() || null;
@@ -294,8 +279,6 @@ Snippet: ${job.snippet}`;
       company: null,
       isOpportunity,
       isPhD,
-      isPhdArticle,
-      isJob,
       location: null,
       deadline: null,
       generatedTitle,
@@ -307,27 +290,293 @@ Snippet: ${job.snippet}`;
 
     const lower = text.toLowerCase();
     const isPhD = /phd|ph\.d|doctoral|doctorate/.test(lower);
-    const looksJob = /developer|engineer|software|frontend|backend|full[- ]?stack|data scientist|analyst|manager|intern/.test(
+    const isClearlyNonVacancy = /cv|curriculum vitae|publications|publication list|alumni|blog|news|ranking|how to |guide/i.test(
       lower,
     );
-    const isArticleLike = /how to |tips|tricks|guide|the importance|why |what i |life as a phd|doing a phd/i.test(
-      lower,
-    );
-    const kind: HunterKind = isArticleLike ? 'ARTICLE' : isPhD ? 'PHD' : looksJob ? 'JOB' : 'OTHER';
+    const kind: HunterKind = !isPhD || isClearlyNonVacancy ? 'OTHER' : 'PHD';
 
     return {
       title: job.title,
       company: null,
-      isOpportunity: kind === 'PHD' || kind === 'JOB',
+      isOpportunity: kind === 'PHD',
       isPhD: kind === 'PHD',
-      isPhdArticle: kind === 'ARTICLE',
-      isJob: kind === 'JOB',
       location: null,
       deadline: null,
       generatedTitle: null,
       cleanedDescription: null,
     };
   }
+}
+
+type Decision = {
+  shouldProcess: boolean;
+  score: number;
+  reasons: string[];
+};
+
+function shouldProcessLink(job: RawJob): boolean {
+  return decide(job).shouldProcess;
+}
+
+function decide(job: RawJob): Decision {
+  const title = (job.title ?? '').toLowerCase();
+  const snippet = (job.snippet ?? '').toLowerCase();
+  const url = (job.url ?? '').toLowerCase();
+  const text = `${title}\n${snippet}\n${url}`;
+
+  const HARD_NOISE_TEXT = [
+    'blog',
+    'blogs',
+    'news',
+    'newsletter',
+    'press release',
+    'podcast',
+    'webinar',
+    'episode',
+    'video',
+    'youtube',
+    'interview',
+    'opinion',
+    'editorial',
+    'how to',
+    'guide',
+    'tutorial',
+    'walkthrough',
+    'handbook',
+    'manual',
+    'faq',
+    'what is',
+    'explained',
+    'explainer',
+    'definition of',
+    'ranking',
+    'rankings',
+    'best phd',
+    'top phd',
+    'top universities',
+    'best universities',
+    'comparison',
+    'compare',
+    'pros and cons',
+    'list of',
+    'reviews',
+    'review',
+    'alumni',
+    'alumnus',
+    'alumna',
+    'student profile',
+    'staff profile',
+    'faculty profile',
+    'our team',
+    'meet the team',
+    'people',
+    'publication',
+    'publications',
+    'publication list',
+    'papers',
+    'journal',
+    'conference paper',
+    'proceedings',
+    'preprint',
+    'arxiv',
+    'thesis',
+    'dissertation',
+    'defense',
+    'completed phd',
+    'cv',
+    'resume',
+    'curriculum vitae',
+    'cover letter',
+    'interview tips',
+    'career advice',
+    'job search',
+  ];
+
+  const HARD_NOISE_URL = [
+    '/blog/',
+    '/blogs/',
+    '/news/',
+    '/press/',
+    '/media/',
+    '/podcast/',
+    '/webinar/',
+    '/video/',
+    '/videos/',
+    '/events/',
+    '/event/',
+    '/people/',
+    '/team/',
+    '/staff/',
+    '/alumni/',
+    '/publications/',
+    '/about/',
+    '/about-us/',
+    '/faq/',
+    '/help/',
+    '/support/',
+    '/docs/',
+    '/documentation/',
+  ];
+
+  const SOFT_NOISE_TEXT = [
+    'admissions',
+    'admission requirements',
+    'entry requirements',
+    'eligibility criteria explained',
+    'program overview',
+    'program description',
+    'phd program',
+    'doctoral program',
+    'degree requirements',
+    'program structure',
+    'curriculum',
+    'coursework',
+    'department overview',
+    'research areas',
+    'research themes',
+    'research interests',
+    'lab overview',
+    'group overview',
+    'mission',
+    'vision',
+    'history',
+    'background',
+    'open day',
+    'info session',
+    'information session',
+    'registration',
+    'agenda',
+    'schedule',
+    'call for papers',
+    'cfp',
+    'conference',
+    'workshop',
+    'symposium',
+    'summer school',
+    'winter school',
+    'seminar',
+    'lecture',
+    'lecture series',
+    'pricing',
+    'plans',
+    'subscribe',
+    'subscription',
+    'trial',
+    'discount',
+    'sale',
+    'sponsored',
+    'advertisement',
+    'marketing',
+  ];
+
+  const POS_TEXT = [
+    'phd position',
+    'ph.d position',
+    'doctoral position',
+    'doctoral vacancy',
+    'phd vacancy',
+    'studentship',
+    'phd studentship',
+    'doctoral studentship',
+    'fully funded',
+    'funded phd',
+    'scholarship',
+    'doctoral scholarship',
+    'fellowship',
+    'research fellowship',
+    'vacancy',
+    'vacancies',
+    'opening',
+    'openings',
+    'position available',
+    'positions available',
+    'we are hiring',
+    'job posting',
+    'job post',
+    'job opportunity',
+    'opportunity',
+    'apply',
+    'application',
+    'deadline',
+    'closing date',
+    'start date',
+    'stipend',
+    'salary',
+    'funding',
+    'funded',
+    'call for applications',
+    'call for candidates',
+    'recruitment',
+    'candidates are invited',
+    'requirements',
+    'eligibility',
+    'how to apply',
+  ];
+
+  const POS_URL = [
+    '/jobs/',
+    '/job/',
+    '/careers/',
+    '/career/',
+    '/vacancies/',
+    '/vacancy/',
+    '/open-positions/',
+    '/positions/',
+    '/opportunities/',
+    '/opportunity/',
+    '/calls/',
+    '/call/',
+    '/recruitment/',
+    '/join-us/',
+    '/work-with-us/',
+    '/apply/',
+  ];
+
+  const reasons: string[] = [];
+
+  const hardUrlHit = HARD_NOISE_URL.find((p) => url.includes(p));
+  const hardTextHit = HARD_NOISE_TEXT.find((kw) => title.includes(kw) || snippet.includes(kw));
+  const posTextHit = POS_TEXT.find((kw) => title.includes(kw) || snippet.includes(kw));
+  const posUrlHit = POS_URL.find((p) => url.includes(p));
+
+  let score = 0;
+
+  if (posTextHit) {
+    score += 3;
+    reasons.push(`POS_TEXT:${posTextHit}`);
+  }
+  if (posUrlHit) {
+    score += 2;
+    reasons.push(`POS_URL:${posUrlHit}`);
+  }
+
+  if (hardTextHit) {
+    score -= 6;
+    reasons.push(`HARD_TEXT:${hardTextHit}`);
+  }
+  if (hardUrlHit) {
+    score -= 5;
+    reasons.push(`HARD_URL:${hardUrlHit}`);
+  }
+
+  const softTextHits = SOFT_NOISE_TEXT.filter((kw) => text.includes(kw));
+  if (softTextHits.length > 0) {
+    score -= Math.min(4, softTextHits.length);
+    reasons.push(
+      `SOFT_TEXT:${softTextHits.slice(0, 6).join('|')}${softTextHits.length > 6 ? '…' : ''}`,
+    );
+  }
+
+  const hasStrongPositive = Boolean(posTextHit || posUrlHit);
+
+  if ((hardTextHit || hardUrlHit) && !hasStrongPositive) {
+    return { shouldProcess: false, score, reasons };
+  }
+
+  if (score >= 2) return { shouldProcess: true, score, reasons };
+  if (score <= -3) return { shouldProcess: false, score, reasons };
+
+  return { shouldProcess: true, score, reasons };
 }
 
 async function scrapeFindAPhD(page: any): Promise<RawJob[]> {
@@ -526,7 +775,7 @@ async function huntWithSearchEngine(): Promise<RawJob[]> {
   ];
 
   for (const domain of domains) {
-    const query = `PhD positions ${domain} Europe 2025 2026`;
+    const query = `(intitle:"vacancy" OR intitle:"position" OR intitle:"opening") "PhD" ${domain} Europe 2025..2026 -site:linkedin.com -site:findaphd.com`;
     try {
       const phdResults = await searchWeb(query);
       for (const item of phdResults) {
@@ -565,10 +814,8 @@ async function upsertJob(raw: RawJob, enriched: EnrichedJob) {
         ? enriched.generatedTitle
         : enriched.title || raw.title) || raw.title,
     ),
-    type: enriched.isPhD ? 'PHD' : 'JOB',
+    type: 'PHD',
     isPhd: enriched.isPhD,
-    isPhdArticle: enriched.isPhdArticle,
-    isJob: enriched.isJob,
     company: enriched.company || 'Unknown',
     country: raw.country || enriched.location || 'Unknown',
     city: raw.city || 'Unknown',
@@ -676,13 +923,35 @@ export async function runHunter() {
 
     const allRaw: RawJob[] = [];
 
+    // Tier 1: high-fidelity curated PhD sources
+    try {
+      allRaw.push(...(await scrapeFindAPhD(page)));
+    } catch (e) {
+      console.error('[hunter] FindAPhD scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntPhdGermany(page)));
+    } catch (e) {
+      console.error('[hunter] DAAD Germany scrape failed', e);
+    }
+
+    try {
+      allRaw.push(...(await huntPhdNetherlands(page)));
+    } catch (e) {
+      console.error('[hunter] AcademicTransfer NL scrape failed', e);
+    }
+
+    // Tier 2: open-web Google Custom Search
     try {
       allRaw.push(...(await huntWithSearchEngine()));
     } catch (e) {
       console.error('[hunter] search-engine based hunt failed', e);
     }
 
-    const filteredRaw = allRaw.filter((job) => !isGenericPageTitle(job.title));
+    const filteredRaw = allRaw
+      .filter((job) => !isGenericPageTitle(job.title))
+      .filter((job) => shouldProcessLink(job));
     const uniqueRaw = dedupeRawJobs(filteredRaw);
     const toProcess = uniqueRaw.slice(0, MAX_ITEMS_PER_RUN);
     console.log('[hunter] total raw scraped items:', allRaw.length);
@@ -706,8 +975,8 @@ export async function runHunter() {
 
         const enriched = await classifyWithGroq(classifyInput);
 
-        // Skip obvious non-opportunities
-        if (!enriched.isOpportunity || (!enriched.isPhD && !enriched.isPhdArticle && !enriched.isJob)) {
+        // Skip obvious non-opportunities; we only keep active PhD positions
+        if (!enriched.isOpportunity || !enriched.isPhD) {
           console.log('[hunter] skipping non-opportunity', raw.url);
           continue;
         }

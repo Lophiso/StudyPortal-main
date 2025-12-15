@@ -101,7 +101,6 @@ export type Database = {
           title: string;
           type: 'PHD' | 'JOB';
           isPhd: boolean | null;
-          isPhdArticle: boolean | null;
           isJob: boolean | null;
           company: string;
           country: string;
@@ -119,7 +118,6 @@ export type Database = {
           title: string;
           type: 'PHD' | 'JOB';
           isPhd?: boolean | null;
-          isPhdArticle?: boolean | null;
           isJob?: boolean | null;
           company: string;
           country: string;
@@ -137,7 +135,6 @@ export type Database = {
           title?: string;
           type?: 'PHD' | 'JOB';
           isPhd?: boolean | null;
-          isPhdArticle?: boolean | null;
           isJob?: boolean | null;
           company?: string;
           country?: string;
