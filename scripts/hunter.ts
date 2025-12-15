@@ -47,11 +47,22 @@ interface RawJob {
 interface EnrichedJob {
   title: string;
   company: string | null;
+  /**
+   * Whether this page actually contains a concrete, currently open opportunity
+   * (e.g. a PhD position) rather than just a generic profile, CV or article.
+   */
+  isOpportunity: boolean;
   isPhD: boolean;
   isPhdArticle: boolean;
   isJob: boolean;
+  /** Optional cleaned location string (e.g. "Vienna, Austria"). */
   location: string | null;
+  /** Optional normalized deadline in ISO-8601 format if known. */
   deadline: string | null; // ISO if known
+  /** Optional Groq-generated compact title specifically for the opportunity. */
+  generatedTitle?: string | null;
+  /** Optional Groq-generated cleaned description focused only on the vacancy. */
+  cleanedDescription?: string | null;
 }
 
 function normalizeDeadline(raw: string | null | undefined): string | null {
@@ -176,29 +187,50 @@ async function classifyWithGroq(job: RawJob): Promise<EnrichedJob> {
     return {
       title: job.title,
       company: null,
+      isOpportunity: kind === 'PHD' || kind === 'JOB',
       isPhD: kind === 'PHD',
       isPhdArticle: kind === 'ARTICLE',
       isJob: kind === 'JOB',
       location: null,
       deadline: null,
+      generatedTitle: null,
+      cleanedDescription: null,
     };
   }
 
   try {
     groqCallsThisRun += 1;
 
-    const prompt = `You classify web pages from academic and job sites.
+    const prompt = `You analyze web pages from academic and job sites and perform STRICT opportunity detection and extraction.
 
-Return a single JSON object with fields: title, kind, language.
+You MUST return a single JSON object with the following fields:
+{
+  "title": string,                // Best human-readable title for the page as a whole
+  "kind": "PHD" | "JOB" | "ARTICLE" | "OTHER",
+  "language": string,            // lowercase ISO 639-1 code like "en", "de", "it"
+  "isOpportunity": boolean,      // true ONLY if there is at least one concrete, currently open position
+  "generatedTitle": string|null, // Short, clean title for the main opportunity (if any)
+  "cleanedDescription": string|null, // 2-6 sentences describing ONLY the opportunity itself
+  "confidence": number           // 0-100 confidence that this is correctly classified
+}
 
-- kind MUST be exactly one of: "PHD", "JOB", "ARTICLE", "OTHER".
-- language MUST be a lowercase ISO 639-1 code like "en", "de", "it".
+CRITICAL RULES:
+- If the text is mostly a person profile (CV, long biography, publication list, talks, teaching, committees)
+  and does NOT contain a clearly identified, currently open position with some description, DEADLINE or HOW TO APPLY,
+  then set isOpportunity = false and kind = "OTHER" (or "ARTICLE" if it reads like an article).
 
-Special rules:
-- If the page is a genuine PhD / doctoral POSITION, use kind = "PHD".
-- If it is a PhD-related ARTICLE, blog or advice piece, use kind = "ARTICLE".
-- If it is an industry or non-academic job, use kind = "JOB".
-- Otherwise use kind = "OTHER".
+- If there is a specific open PhD / doctoral position, set:
+  - kind = "PHD"
+  - isOpportunity = true
+  - generatedTitle = a concise title like "PhD in Serverless Edge Computing (TU Wien)" (do NOT use generic page titles like "Home" or just the professor name)
+  - cleanedDescription = ONLY the paragraphs that describe the position, research topic, requirements, funding and how to apply.
+    Remove navigation links, news items, unrelated projects, full CVs, publication lists, teaching, etc.
+
+- If there is a non-academic or industry job, set kind = "JOB" and isOpportunity = true and extract only the job description.
+
+- If the page is an article, blog post, advice, conference call for papers, or similar, set kind = "ARTICLE" and isOpportunity = false.
+
+You MUST be conservative: when in doubt, prefer isOpportunity = false.
 
 URL: ${job.url}
 Title: ${job.title}
@@ -220,7 +252,15 @@ Snippet: ${job.snippet}`;
     });
 
     const raw = completion.choices?.[0]?.message?.content || '{}';
-    let parsed: { title?: string; kind?: HunterKind; language?: string } = {};
+    let parsed: {
+      title?: string;
+      kind?: HunterKind;
+      language?: string;
+      isOpportunity?: boolean;
+      generatedTitle?: string | null;
+      cleanedDescription?: string | null;
+      confidence?: number;
+    } = {};
     try {
       parsed = JSON.parse(raw);
     } catch {
@@ -244,15 +284,22 @@ Snippet: ${job.snippet}`;
     const isPhD = kind === 'PHD';
     const isPhdArticle = kind === 'ARTICLE';
     const isJob = kind === 'JOB';
+    const isOpportunity = Boolean(parsed.isOpportunity && (isPhD || isJob));
+
+    const generatedTitle = (parsed.generatedTitle || '').trim() || null;
+    const cleanedDescription = (parsed.cleanedDescription || '').trim() || null;
 
     return {
       title: parsed.title || job.title,
       company: null,
+      isOpportunity,
       isPhD,
       isPhdArticle,
       isJob,
       location: null,
       deadline: null,
+      generatedTitle,
+      cleanedDescription,
     };
   } catch (e) {
     console.error('[hunter] Groq classification failed, falling back to heuristic', e);
@@ -271,11 +318,14 @@ Snippet: ${job.snippet}`;
     return {
       title: job.title,
       company: null,
+      isOpportunity: kind === 'PHD' || kind === 'JOB',
       isPhD: kind === 'PHD',
       isPhdArticle: kind === 'ARTICLE',
       isJob: kind === 'JOB',
       location: null,
       deadline: null,
+      generatedTitle: null,
+      cleanedDescription: null,
     };
   }
 }
@@ -510,7 +560,11 @@ function dedupeRawJobs(jobs: RawJob[]): RawJob[] {
 
 async function upsertJob(raw: RawJob, enriched: EnrichedJob) {
   const payload: any = {
-    title: normalizeJobTitle(enriched.title || raw.title),
+    title: normalizeJobTitle(
+      (enriched.generatedTitle && enriched.generatedTitle.length > 0
+        ? enriched.generatedTitle
+        : enriched.title || raw.title) || raw.title,
+    ),
     type: enriched.isPhD ? 'PHD' : 'JOB',
     isPhd: enriched.isPhD,
     isPhdArticle: enriched.isPhdArticle,
@@ -518,7 +572,7 @@ async function upsertJob(raw: RawJob, enriched: EnrichedJob) {
     company: enriched.company || 'Unknown',
     country: raw.country || enriched.location || 'Unknown',
     city: raw.city || 'Unknown',
-    description: raw.description || raw.snippet,
+    description: enriched.cleanedDescription || raw.description || raw.snippet,
     requirements:
       raw.requirements && raw.requirements.length > 0
         ? raw.requirements
@@ -653,7 +707,7 @@ export async function runHunter() {
         const enriched = await classifyWithGroq(classifyInput);
 
         // Skip obvious non-opportunities
-        if (!enriched.isPhD && !enriched.isPhdArticle && !enriched.isJob) {
+        if (!enriched.isOpportunity || (!enriched.isPhD && !enriched.isPhdArticle && !enriched.isJob)) {
           console.log('[hunter] skipping non-opportunity', raw.url);
           continue;
         }
