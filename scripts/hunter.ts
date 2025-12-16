@@ -324,6 +324,53 @@ function decide(job: RawJob): Decision {
   const url = (job.url ?? '').toLowerCase();
   const text = `${title}\n${snippet}\n${url}`;
 
+  const TOPIC_KEYWORDS = [
+    'computer science',
+    'software engineering',
+    'software engineer',
+    'software development',
+    'artificial intelligence',
+    'machine learning',
+    'deep learning',
+    'natural language processing',
+    'nlp',
+    'data science',
+    'big data',
+    'data analytics',
+    'analytics',
+    'cybersecurity',
+    'information security',
+    'information privacy',
+    'privacy',
+    'cloud computing',
+    'cloud engineer',
+    'devops',
+    'site reliability engineer',
+    'sre',
+    'telecommunications',
+    '5g',
+    'networking',
+    'network engineer',
+    'autonomous systems',
+    'autonomous vehicles',
+    'robotics',
+    'robot',
+    'control theory',
+    'control systems',
+    'internet of things',
+    'iot',
+    'embedded systems',
+    'embedded software',
+    'embedded engineer',
+    'mathematics',
+    'applied mathematics',
+    'computational science',
+    'scientific computing',
+    'blockchain',
+    'cryptography',
+    'crypto protocol',
+  ];
+
   const HARD_NOISE_TEXT = [
     'blog',
     'blogs',
@@ -575,6 +622,11 @@ function decide(job: RawJob): Decision {
 
   if (score >= 2) return { shouldProcess: true, score, reasons };
   if (score <= -3) return { shouldProcess: false, score, reasons };
+  const topicHit = TOPIC_KEYWORDS.some((kw) => text.includes(kw));
+  if (!topicHit) {
+    reasons.push('TOPIC:OFF_DOMAIN');
+    return { shouldProcess: false, score, reasons };
+  }
 
   return { shouldProcess: true, score, reasons };
 }
@@ -867,7 +919,8 @@ async function enrichRawJobWithPage(page: any, job: RawJob): Promise<RawJob> {
 
     const meta: { city: string | null; country: string | null; deadline: string | null } =
       await page.evaluate(() => {
-        const bodyText = (document.body?.innerText || '').replace(/\s+/g, ' ');
+        const rawBody = document.body?.innerText || '';
+        const bodyText = rawBody.replace(/\s+/g, ' ');
 
         let deadline: string | null = null;
         const deadlineMatch =
@@ -887,6 +940,33 @@ async function enrichRawJobWithPage(page: any, job: RawJob): Promise<RawJob> {
           } else if (parts.length >= 2) {
             city = parts[0] || null;
             country = parts[parts.length - 1] || null;
+          }
+        }
+
+        if (!country) {
+          const KNOWN_COUNTRIES = [
+            'United States',
+            'USA',
+            'Canada',
+            'Germany',
+            'Netherlands',
+            'Italy',
+            'Belgium',
+            'France',
+            'Denmark',
+            'Australia',
+            'Switzerland',
+            'Norway',
+            'Sweden',
+            'Austria',
+            'Ireland',
+          ];
+          const lowerBody = bodyText.toLowerCase();
+          for (const name of KNOWN_COUNTRIES) {
+            if (lowerBody.includes(name.toLowerCase())) {
+              country = name;
+              break;
+            }
           }
         }
 

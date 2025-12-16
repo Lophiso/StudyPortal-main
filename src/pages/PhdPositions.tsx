@@ -126,14 +126,23 @@ function PhdResults({
 }: PhdResultsProps) {
   const availableCountries = useMemo(
     () =>
-      Array.from(
-        new Set(
-          jobs
-            .map((j) => j.country)
-            .filter((c): c is string => Boolean(c && c !== 'Unknown')),
-        ),
-      ),
-    [jobs],
+      [
+        'USA',
+        'Canada',
+        'Germany',
+        'Netherlands',
+        'Italy',
+        'Belgium',
+        'France',
+        'Denmark',
+        'Australia',
+        'Switzerland',
+        'Norway',
+        'Sweden',
+        'Austria',
+        'Ireland',
+      ],
+    [],
   );
 
   const filtered = useMemo(() => {
@@ -152,7 +161,10 @@ function PhdResults({
     }
 
     if (selectedCountries.length > 0) {
-      list = list.filter((job) => job.country && selectedCountries.includes(job.country));
+      list = list.filter((job) => {
+        const c = (job.country || '').toString().trim();
+        return c && selectedCountries.includes(c);
+      });
     }
 
     if (activeKeyword) {
