@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { MapPin, Clock, ExternalLink } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import NavbarNext from '../../../components/NavbarNext';
 import { supabase } from '../../../lib/supabase';
 import type { JobOpportunity } from '../../../lib/database.types';
@@ -121,11 +123,13 @@ export default function JobDetailPage() {
 
               <div className="px-6 py-5 space-y-6">
                 <section>
-                  <h2 className="text-sm font-semibold text-[#002147] mb-2">Overview</h2>
-                  {summary.loading && <p className="text-xs text-gray-600">Generating a brief overview with AI…</p>}
+                  <h2 className="text-sm font-semibold text-[#002147] mb-2">Summary</h2>
+                  {summary.loading && <p className="text-xs text-gray-600">Generating summary…</p>}
                   {!summary.loading && summary.error && <p className="text-xs text-gray-600">{summary.error}</p>}
                   {!summary.loading && summary.text && (
-                    <p className="text-xs text-gray-700 whitespace-pre-line">{summary.text}</p>
+                    <div className="prose prose-slate max-w-none text-xs">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary.text}</ReactMarkdown>
+                    </div>
                   )}
                   {!summary.loading && !summary.text && !summary.error && (
                     <p className="text-xs text-gray-700 whitespace-pre-line">{job.description}</p>
