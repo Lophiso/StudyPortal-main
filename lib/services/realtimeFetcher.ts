@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/lib/database.types';
 import Parser from 'rss-parser';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import * as cheerio from 'cheerio';
+import { SEARCH_CONFIG } from '../searchConfig';
 
 const geminiApiKey = process.env.GEMINI_API_KEY as string;
 
@@ -57,6 +59,7 @@ interface FeedItem {
 }
 
 interface GeminiEnriched {
+  title: string | null;
   city: string | null;
   country: string | null;
   requirements: string[];
@@ -64,6 +67,148 @@ interface GeminiEnriched {
   isPhD: boolean;
   language: string | null;
   summaryEn: string | null;
+}
+
+function isBlockedContent(text: string) {
+  const haystack = text.toLowerCase();
+  return haystack.includes('cloudflare') || haystack.includes('access denied') || haystack.includes('blocked');
+}
+
+function truncateTitle(title: string) {
+  const cleaned = title.replace(/\s+/g, ' ').trim();
+  if (cleaned.length <= 60) return cleaned;
+  return cleaned.slice(0, 57).trimEnd() + '...';
+}
+
+type GoogleCseResult = { title: string; link: string; snippet: string };
+
+async function searchWithGoogleCse(query: string): Promise<GoogleCseResult[]> {
+  const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
+  const cx = process.env.GOOGLE_SEARCH_CX;
+
+  if (!apiKey || !cx) {
+    console.warn('[realtimeFetcher] Google CSE env missing; skipping search discovery');
+    return [];
+  }
+
+  const url = new URL('https://www.googleapis.com/customsearch/v1');
+  url.searchParams.set('key', apiKey);
+  url.searchParams.set('cx', cx);
+  url.searchParams.set('q', query);
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    console.warn('[realtimeFetcher] Google CSE HTTP error', res.status);
+    return [];
+  }
+
+  const data: any = await res.json();
+  const items: any[] = Array.isArray(data.items) ? data.items : [];
+  return items
+    .map((item) => ({
+      title: (item.title ?? '').toString(),
+      link: (item.link ?? '').toString(),
+      snippet: (item.snippet ?? '').toString(),
+    }))
+    .filter((r) => r.title && r.link);
+}
+
+function htmlToMarkdown(html: string, baseUrl: string) {
+  const $ = cheerio.load(html);
+
+  $('script,noscript,style,svg,iframe').remove();
+
+  const root =
+    $('main').first().length > 0
+      ? $('main').first()
+      : $('article').first().length > 0
+        ? $('article').first()
+        : $('body');
+
+  const lines: string[] = [];
+
+  const pushText = (text: string) => {
+    const t = text.replace(/\s+/g, ' ').trim();
+    if (!t) return;
+    lines.push(t);
+  };
+
+  root.find('h1,h2,h3,p,li,a').each((_, el) => {
+    const tag = el.tagName?.toLowerCase?.() ?? '';
+
+    if (tag === 'h1') {
+      pushText(`# ${$(el).text()}`);
+      lines.push('');
+      return;
+    }
+
+    if (tag === 'h2') {
+      pushText(`## ${$(el).text()}`);
+      lines.push('');
+      return;
+    }
+
+    if (tag === 'h3') {
+      pushText(`### ${$(el).text()}`);
+      lines.push('');
+      return;
+    }
+
+    if (tag === 'li') {
+      pushText(`- ${$(el).text()}`);
+      return;
+    }
+
+    if (tag === 'a') {
+      const text = $(el).text().replace(/\s+/g, ' ').trim();
+      const href = $(el).attr('href') ?? '';
+      if (!text || !href) return;
+      const abs = href.startsWith('http') ? href : new URL(href, baseUrl).toString();
+      pushText(`[${text}](${abs})`);
+      return;
+    }
+
+    pushText($(el).text());
+    lines.push('');
+  });
+
+  const md = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return md;
+}
+
+async function fetchMarkdownForUrl(url: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+
+  const res = await fetch(
+    url,
+    {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      signal: controller.signal,
+    },
+  );
+
+  clearTimeout(timeout);
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+
+  const html = await res.text();
+  if (isBlockedContent(html)) {
+    return { markdown: null as string | null, blocked: true };
+  }
+
+  const markdown = htmlToMarkdown(html, url);
+  if (isBlockedContent(markdown)) {
+    return { markdown: null as string | null, blocked: true };
+  }
+
+  return { markdown, blocked: false };
 }
 
 export async function runRealtimeIngestion(options?: { includeIndustry?: boolean }) {
@@ -85,6 +230,22 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
   if (includeIndustry) {
     for (const url of INDUSTRY_FEEDS) {
       selectedFeeds.push({ url, inferredType: 'JOB' });
+    }
+  }
+
+  const searchSeeds: Array<{ query: string; inferredType: EngineJobType; tag: string }> = [];
+  for (const q of SEARCH_CONFIG.phdKeywords) {
+    searchSeeds.push({ query: q, inferredType: 'PHD', tag: 'PHD_GLOBAL' });
+  }
+  for (const q of SEARCH_CONFIG.canadaPhdKeywords) {
+    searchSeeds.push({ query: q, inferredType: 'PHD', tag: 'PHD_CANADA' });
+  }
+  if (includeIndustry) {
+    for (const q of SEARCH_CONFIG.jobKeywords) {
+      searchSeeds.push({ query: q, inferredType: 'JOB', tag: 'JOB_GLOBAL' });
+    }
+    for (const q of SEARCH_CONFIG.canadaJobKeywords) {
+      searchSeeds.push({ query: q, inferredType: 'JOB', tag: 'JOB_CANADA' });
     }
   }
 
@@ -125,6 +286,30 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
     }
   }
 
+  const cseItems: FeedItem[] = [];
+  for (const seed of searchSeeds) {
+    try {
+      const results = await searchWithGoogleCse(seed.query);
+      for (const r of results.slice(0, 5)) {
+        if (!r.link || !r.title) continue;
+        cseItems.push({
+          title: r.title,
+          link: r.link,
+          description: r.snippet ?? '',
+          pubDate: null,
+          source: `GOOGLE_CSE_${seed.tag}`,
+          inferredType: seed.inferredType,
+        });
+      }
+    } catch (e: any) {
+      console.warn('[realtimeFetcher] CSE search failed', seed.query, e?.message ?? String(e));
+    }
+  }
+
+  if (cseItems.length > 0) {
+    feedItems.push(...cseItems);
+  }
+
   console.log('[realtimeFetcher] total raw feed items:', feedItems.length);
 
   const uniqueByLink = new Map<string, FeedItem>();
@@ -163,6 +348,7 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
           responseSchema: {
             type: SchemaType.OBJECT,
             properties: {
+              title: { type: SchemaType.STRING, nullable: true },
               city: { type: SchemaType.STRING, nullable: true },
               country: { type: SchemaType.STRING, nullable: true },
               isPhD: { type: SchemaType.BOOLEAN },
@@ -204,7 +390,13 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
     newItems.push(item);
   }
 
+  const MAX_AI_ITEMS = 15;
+  const limitedNewItems = newItems.slice(0, MAX_AI_ITEMS);
+
   console.log('[realtimeFetcher] new items requiring AI:', newItems.length);
+  if (newItems.length > limitedNewItems.length) {
+    console.log('[realtimeFetcher] limiting AI enrichment to', limitedNewItems.length, 'items');
+  }
 
   const BATCH_SIZE = 3;
 
@@ -212,24 +404,51 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
     try {
       let enriched: GeminiEnriched | null = null;
 
+      let contentMarkdown = item.description;
+      try {
+        const { markdown, blocked } = await fetchMarkdownForUrl(item.link);
+        if (blocked) {
+          skipped.push({ link: item.link, reason: 'blocked_content' });
+          return;
+        }
+        if (markdown) {
+          contentMarkdown = markdown;
+        }
+      } catch (e: any) {
+        console.warn('[realtimeFetcher] page fetch/markdown failed for', item.link, e?.message ?? String(e));
+      }
+
+      if (isBlockedContent(contentMarkdown)) {
+        skipped.push({ link: item.link, reason: 'blocked_content' });
+        return;
+      }
+
+      const MAX_MARKDOWN_CHARS = 12_000;
+      if (contentMarkdown.length > MAX_MARKDOWN_CHARS) {
+        contentMarkdown = contentMarkdown.slice(0, MAX_MARKDOWN_CHARS);
+      }
+
       if (model) {
         try {
           const prompt = `You are enriching job and PhD opportunity posts for a database.
 Analyze the following text and:
+0) Produce a professional, shortened title (max 60 characters).
 1) Detect the main language (ISO 639-1 code if possible).
 2) If the text is not primarily in English, provide a brief 1-2 sentence English summary.
 3) Return a JSON object with fields:
+   - title: string | null (max 60 characters)
    - city: string | null
    - country: string | null
    - isPhD: boolean (true if this is clearly a PhD/doctoral opportunity)
-   - deadline: ISO8601 string or null
+   - deadline: YYYY-MM-DD string or null
    - requirements: string[] (short bullet-style requirement sentences)
    - language: string | null (language code or name)
    - summaryEn: string | null (English summary or null if already English)
 
 Text:
-Title: ${item.title}
-Description: ${item.description}`;
+Source title: ${item.title}
+Content (Markdown):
+${contentMarkdown}`;
 
           const response = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -239,6 +458,7 @@ Description: ${item.description}`;
           if (text) {
             const parsed = JSON.parse(text) as Partial<GeminiEnriched>;
             enriched = {
+              title: parsed.title ?? null,
               city: parsed.city ?? null,
               country: parsed.country ?? null,
               isPhD: Boolean(parsed.isPhD),
@@ -258,6 +478,7 @@ Description: ${item.description}`;
         const text = `${item.title}\n${item.description}`.toLowerCase();
         const isPhD = /phd|ph\.d|doctoral|doctorate/.test(text);
         enriched = {
+          title: null,
           city: null,
           country: null,
           isPhD,
@@ -270,6 +491,7 @@ Description: ${item.description}`;
 
       const city = enriched.city || '';
       const country = enriched.country || '';
+      const cleanedTitle = enriched.title ? truncateTitle(enriched.title) : truncateTitle(item.title);
       const requirements = enriched.requirements && enriched.requirements.length > 0
         ? enriched.requirements
         : ['See full description for details.'];
@@ -284,7 +506,7 @@ Description: ${item.description}`;
       const postedAtIso = item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString();
 
       const payload: Database['public']['Tables']['JobOpportunity']['Insert'] = {
-        title: item.title,
+        title: cleanedTitle,
         type,
         company: item.source.includes('weworkremotely.com')
           ? 'We Work Remotely'
@@ -293,7 +515,7 @@ Description: ${item.description}`;
           : 'Unknown',
         country: country || 'Unknown',
         city: city || 'Unknown',
-        description: enriched.summaryEn ?? item.description,
+        description: enriched.summaryEn ?? contentMarkdown,
         requirements,
         deadline,
         postedAt: postedAtIso,
@@ -316,8 +538,8 @@ Description: ${item.description}`;
     }
   };
 
-  for (let i = 0; i < newItems.length; i += BATCH_SIZE) {
-    const batch = newItems.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < limitedNewItems.length; i += BATCH_SIZE) {
+    const batch = limitedNewItems.slice(i, i + BATCH_SIZE);
     await Promise.all(batch.map((item) => processItem(item)));
   }
 
