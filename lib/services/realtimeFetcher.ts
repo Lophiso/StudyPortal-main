@@ -80,6 +80,72 @@ function truncateTitle(title: string) {
   return cleaned.slice(0, 57).trimEnd() + '...';
 }
 
+function toIsoDateString(date: Date) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function normalizeDeadline(raw: string | null | undefined) {
+  if (!raw) return null;
+  const s = raw.toString().trim();
+  if (!s) return null;
+
+  const iso = s.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1];
+  if (iso) return iso;
+
+  const parsed = new Date(s);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  return toIsoDateString(parsed);
+}
+
+function extractDeadlineFromText(text: string) {
+  const iso = text.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1];
+  if (iso) return iso;
+
+  const monthMap: Record<string, number> = {
+    january: 0,
+    february: 1,
+    march: 2,
+    april: 3,
+    may: 4,
+    june: 5,
+    july: 6,
+    august: 7,
+    september: 8,
+    october: 9,
+    november: 10,
+    december: 11,
+  };
+
+  const t = text.toLowerCase();
+  const ctx = t.match(
+    /(deadline|closing date|apply by|applications close|application deadline)[^\n]{0,120}/,
+  )?.[0];
+  const scope = ctx ?? t;
+
+  const m1 = scope.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?[,]?\s+(\d{4})\b/);
+  if (m1) {
+    const month = monthMap[m1[1]];
+    const day = Number(m1[2]);
+    const year = Number(m1[3]);
+    const d = new Date(Date.UTC(year, month, day));
+    if (Number.isFinite(d.getTime())) return toIsoDateString(d);
+  }
+
+  const m2 = scope.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december)[,]?\s+(\d{4})\b/);
+  if (m2) {
+    const day = Number(m2[1]);
+    const month = monthMap[m2[2]];
+    const year = Number(m2[3]);
+    const d = new Date(Date.UTC(year, month, day));
+    if (Number.isFinite(d.getTime())) return toIsoDateString(d);
+  }
+
+  return null;
+}
+
 type GoogleCseResult = { title: string; link: string; snippet: string };
 
 async function searchWithGoogleCse(query: string): Promise<GoogleCseResult[]> {
@@ -434,7 +500,7 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
 Analyze the following text and:
 0) Produce a professional, shortened title (max 60 characters).
 1) Detect the main language (ISO 639-1 code if possible).
-2) If the text is not primarily in English, provide a brief 1-2 sentence English summary.
+2) Provide a concise English Markdown summary (3-5 sentences + 3-5 bullet points).
 3) Return a JSON object with fields:
    - title: string | null (max 60 characters)
    - city: string | null
@@ -443,7 +509,7 @@ Analyze the following text and:
    - deadline: YYYY-MM-DD string or null
    - requirements: string[] (short bullet-style requirement sentences)
    - language: string | null (language code or name)
-   - summaryEn: string | null (English summary or null if already English)
+   - summaryEn: string | null (concise English Markdown summary)
 
 Text:
 Source title: ${item.title}
@@ -502,7 +568,21 @@ ${contentMarkdown}`;
         skipped.push({ link: item.link, reason: 'filtered_non_phd' });
         return;
       }
-      const deadline = enriched.deadline ?? null;
+      const today = toIsoDateString(new Date());
+      const deadline =
+        normalizeDeadline(enriched.deadline) ??
+        extractDeadlineFromText(contentMarkdown) ??
+        extractDeadlineFromText(item.description);
+
+      if (!deadline) {
+        skipped.push({ link: item.link, reason: 'missing_deadline' });
+        return;
+      }
+
+      if (deadline < today) {
+        skipped.push({ link: item.link, reason: 'expired_deadline' });
+        return;
+      }
       const postedAtIso = item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString();
 
       const payload: Database['public']['Tables']['JobOpportunity']['Insert'] = {

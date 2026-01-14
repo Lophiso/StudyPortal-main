@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import NavbarNext from '../../components/NavbarNext';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import type { JobOpportunity } from '../../lib/database.types';
@@ -82,6 +84,27 @@ function PhdPageInner() {
     router.push(`/phd?page=${next}`);
   };
 
+  const pageItems = useMemo(() => {
+    const pages: Array<number | null> = [];
+
+    if (totalPages <= 7) {
+      for (let p = 1; p <= totalPages; p += 1) pages.push(p);
+      return pages;
+    }
+
+    pages.push(1);
+
+    const left = Math.max(2, currentPage - 1);
+    const right = Math.min(totalPages - 1, currentPage + 1);
+
+    if (left > 2) pages.push(null);
+    for (let p = left; p <= right; p += 1) pages.push(p);
+    if (right < totalPages - 1) pages.push(null);
+
+    pages.push(totalPages);
+    return pages;
+  }, [currentPage, totalPages]);
+
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
       <NavbarNext />
@@ -108,28 +131,49 @@ function PhdPageInner() {
         </div>
 
         {!loading && !error && totalCount > 0 && (
-          <div className="flex items-center justify-between mb-4 text-xs text-gray-600">
-            <span>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+            <div className="text-xs text-gray-600">
               Page {currentPage} of {totalPages} (total stored: {totalCount})
-            </span>
-            <div className="flex items-center gap-2">
+            </div>
+
+            <nav className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => goToPage(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="px-3 py-1 border rounded disabled:opacity-50 bg-white"
+                className="h-8 px-3 rounded border bg-white text-xs disabled:opacity-50"
               >
-                Previous
+                Prev
               </button>
+
+              {pageItems.map((p, idx) =>
+                p === null ? (
+                  <span key={`ellipsis-${idx}`} className="px-2 text-xs text-gray-500">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => goToPage(p)}
+                    className={`h-8 w-8 rounded border text-xs ${
+                      p === currentPage ? 'bg-[#002147] text-white border-[#002147]' : 'bg-white text-gray-700'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ),
+              )}
+
               <button
                 type="button"
                 onClick={() => goToPage(currentPage + 1)}
                 disabled={currentPage === totalPages}
-                className="px-3 py-1 border rounded disabled:opacity-50 bg-white"
+                className="h-8 px-3 rounded border bg-white text-xs disabled:opacity-50"
               >
                 Next
               </button>
-            </div>
+            </nav>
           </div>
         )}
 
@@ -160,29 +204,46 @@ function PhdPageInner() {
               onNavigate={(to) => router.push(to)}
             />
 
-            <div className="flex items-center justify-between mt-6 text-xs text-gray-600">
-              <span>
-                Page {currentPage} of {totalPages} (total stored: {totalCount})
-              </span>
-              <div className="flex items-center gap-2">
+            {!loading && !error && totalCount > 0 && (
+              <nav className="flex items-center justify-center gap-1 mt-8">
                 <button
                   type="button"
                   onClick={() => goToPage(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className="px-3 py-1 border rounded disabled:opacity-50 bg-white"
+                  className="h-8 px-3 rounded border bg-white text-xs disabled:opacity-50"
                 >
-                  Previous
+                  Prev
                 </button>
+
+                {pageItems.map((p, idx) =>
+                  p === null ? (
+                    <span key={`ellipsis-bottom-${idx}`} className="px-2 text-xs text-gray-500">
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={`bottom-${p}`}
+                      type="button"
+                      onClick={() => goToPage(p)}
+                      className={`h-8 w-8 rounded border text-xs ${
+                        p === currentPage ? 'bg-[#002147] text-white border-[#002147]' : 'bg-white text-gray-700'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ),
+                )}
+
                 <button
                   type="button"
                   onClick={() => goToPage(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1 border rounded disabled:opacity-50 bg-white"
+                  className="h-8 px-3 rounded border bg-white text-xs disabled:opacity-50"
                 >
                   Next
                 </button>
-              </div>
-            </div>
+              </nav>
+            )}
           </>
         )}
       </div>
@@ -353,40 +414,49 @@ function PhdResults({
             No PhD positions match your current filters. Try adjusting your search.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="flex flex-col gap-4">
             {filtered.map((job) => (
               <div
                 key={job.id}
-                className="bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-200 overflow-hidden cursor-pointer"
-                onClick={() => onNavigate(`/phd/${job.id}`)}
+                className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200"
               >
-                <div className="p-6 flex flex-col h-full">
-                  <div className="flex items-start justify-between mb-3">
-                    <span className="inline-block px-3 py-1 text-xs font-semibold text-white bg-[#002147] rounded-full">
-                      PhD
-                    </span>
-                    <div className="text-right text-xs text-gray-600 space-y-1">
-                      {job.deadline && (
-                        <p>
-                          <span className="font-semibold">Deadline:</span> {new Date(job.deadline).toLocaleDateString()}
-                        </p>
-                      )}
-                      <p>
-                        <span className="font-semibold">Posted:</span> {new Date(job.postedAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-
-                  <h3 className="text-xl font-bold text-[#002147] mb-2 line-clamp-2">{job.title}</h3>
+                <div className="p-5">
+                  <h3 className="text-lg md:text-xl font-semibold text-[#002147] leading-snug mb-1">
+                    {job.title}
+                  </h3>
 
                   {job.company && job.company !== 'Unknown' && (
-                    <p className="text-gray-700 font-medium mb-2 text-sm">{job.company}</p>
+                    <p className="text-sm font-semibold text-red-600 mb-3">
+                      {job.company}
+                    </p>
                   )}
 
-                  <p className="text-gray-600 text-sm line-clamp-3 mb-4">{job.description}</p>
+                  <div
+                    className="text-sm text-gray-700 overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]"
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.description}</ReactMarkdown>
+                  </div>
+                </div>
 
-                  <button className="mt-auto w-full bg-[#FF9900] hover:bg-[#e68a00] text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200">
-                    View Details
+                <div className="bg-gray-50 border-t border-gray-200 px-5 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-700">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border">
+                      📅 {job.deadline ? new Date(job.deadline).toLocaleDateString() : 'TBD'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border">
+                      🎓 PhD
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border">
+                      💰 Unspecified
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(`/phd/${job.id}`)}
+                    className="inline-flex items-center justify-center rounded-md bg-[#FF5A1F] hover:bg-[#e14b1c] text-white text-xs font-semibold px-4 py-2"
+                  >
+                    More details &gt;
                   </button>
                 </div>
               </div>
