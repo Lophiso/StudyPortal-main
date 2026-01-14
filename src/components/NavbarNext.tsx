@@ -55,13 +55,12 @@ export default function NavbarNext() {
             </Link>
 
             {!user ? (
-              <button
-                type="button"
-                onClick={() => router.push('/auth')}
+              <Link
+                href="/auth"
                 className="bg-white text-[#002147] font-semibold py-2 px-4 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 Sign In
-              </button>
+              </Link>
             ) : (
               <div className="relative">
                 <button

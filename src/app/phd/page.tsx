@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import NavbarNext from '../../components/NavbarNext';
-import { supabase } from '../../lib/supabase';
+import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import type { JobOpportunity } from '../../lib/database.types';
 
 export default function PhdPage() {
@@ -20,13 +20,18 @@ export default function PhdPage() {
 
   useEffect(() => {
     async function loadJobs() {
+      if (!isSupabaseConfigured) {
+        setError('Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
 
       const { data, error } = await supabase
         .from('JobOpportunity')
         .select('*')
-        .eq('isPhd', true)
+        .or('type.eq.PHD,isPhd.eq.true')
         .order('postedAt', { ascending: false });
 
       if (error) {

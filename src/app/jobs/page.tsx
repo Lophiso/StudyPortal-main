@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import NavbarNext from '../../components/NavbarNext';
-import { supabase } from '../../lib/supabase';
+import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import type { JobOpportunity } from '../../lib/database.types';
 
 export default function JobsPage() {
@@ -18,12 +18,17 @@ export default function JobsPage() {
 
   useEffect(() => {
     async function loadJobs() {
+      if (!isSupabaseConfigured) {
+        setError('Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       const { data, error } = await supabase
         .from('JobOpportunity')
         .select('*')
-        .eq('isJob', true)
+        .or('type.eq.JOB,isJob.eq.true')
         .order('postedAt', { ascending: false });
 
       if (error) {
