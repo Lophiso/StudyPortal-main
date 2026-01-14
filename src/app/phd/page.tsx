@@ -1,20 +1,41 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Search } from 'lucide-react';
 import NavbarNext from '../../components/NavbarNext';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import type { JobOpportunity } from '../../lib/database.types';
 
 export default function PhdPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F5F7FA]" />}>
+      <PhdPageInner />
+    </Suspense>
+  );
+}
+
+function PhdPageInner() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [jobs, setJobs] = useState<JobOpportunity[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [activeKeyword, setActiveKeyword] = useState<string | null>(null);
-  const router = useRouter();
+
+  const currentPage = useMemo(() => {
+    const raw = searchParams.get('page');
+    const parsed = raw ? Number(raw) : 1;
+    if (!Number.isFinite(parsed) || parsed < 1) return 1;
+    return Math.floor(parsed);
+  }, [searchParams]);
+
+  const ITEMS_PER_PAGE = 20;
+  const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
 
   const keywordChips = ['AI / Data', 'Robotics', 'Climate', 'Europe', 'Remote'];
 
@@ -28,24 +49,38 @@ export default function PhdPage() {
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
+      const from = (currentPage - 1) * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
+
+      const { data, error, count } = await supabase
         .from('JobOpportunity')
-        .select('*')
+        .select('*', { count: 'exact' })
         .or('type.eq.PHD,isPhd.eq.true')
-        .order('postedAt', { ascending: false });
+        .order('postedAt', { ascending: false })
+        .range(from, to);
 
       if (error) {
         console.error('Failed to load PhD positions', error);
         setError('Failed to load PhD positions. Please try again later.');
       } else {
         setJobs((data as JobOpportunity[]) || []);
+        setTotalCount(count ?? 0);
       }
 
       setLoading(false);
     }
 
     void loadJobs();
-  }, []);
+  }, [currentPage]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentPage]);
+
+  const goToPage = (page: number) => {
+    const next = Math.min(Math.max(page, 1), totalPages);
+    router.push(`/phd?page=${next}`);
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
@@ -72,6 +107,32 @@ export default function PhdPage() {
           </div>
         </div>
 
+        {!loading && !error && totalCount > 0 && (
+          <div className="flex items-center justify-between mb-4 text-xs text-gray-600">
+            <span>
+              Page {currentPage} of {totalPages} (total stored: {totalCount})
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1 border rounded disabled:opacity-50 bg-white"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 border rounded disabled:opacity-50 bg-white"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
         {loading && (
           <div className="bg-white rounded-lg shadow-md p-6 text-sm text-gray-600">Loading PhD positions…</div>
         )}
@@ -87,16 +148,42 @@ export default function PhdPage() {
         )}
 
         {!loading && !error && jobs.length > 0 && (
-          <PhdResults
-            jobs={jobs}
-            query={query}
-            selectedCountries={selectedCountries}
-            setSelectedCountries={setSelectedCountries}
-            activeKeyword={activeKeyword}
-            setActiveKeyword={setActiveKeyword}
-            keywordChips={keywordChips}
-            onNavigate={(to) => router.push(to)}
-          />
+          <>
+            <PhdResults
+              jobs={jobs}
+              query={query}
+              selectedCountries={selectedCountries}
+              setSelectedCountries={setSelectedCountries}
+              activeKeyword={activeKeyword}
+              setActiveKeyword={setActiveKeyword}
+              keywordChips={keywordChips}
+              onNavigate={(to) => router.push(to)}
+            />
+
+            <div className="flex items-center justify-between mt-6 text-xs text-gray-600">
+              <span>
+                Page {currentPage} of {totalPages} (total stored: {totalCount})
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border rounded disabled:opacity-50 bg-white"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 border rounded disabled:opacity-50 bg-white"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>
