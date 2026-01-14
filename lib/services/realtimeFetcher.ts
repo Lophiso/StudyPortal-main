@@ -3,14 +3,18 @@ import type { Database } from '../../src/lib/database.types';
 import Parser from 'rss-parser';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 
-const supabaseUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) as string;
-const supabaseAnonKey = (process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) as string;
 const geminiApiKey = process.env.GEMINI_API_KEY as string;
 
-const resolvedUrl = supabaseUrl || 'http://localhost:54321';
-const resolvedAnonKey = supabaseAnonKey || 'public-anon-key-not-configured';
+function createServerSupabaseClient() {
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) as string | undefined;
+  const supabaseServiceKey = process.env.SUPABASE_KEY as string | undefined;
 
-const supabase = createClient<Database>(resolvedUrl, resolvedAnonKey);
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing SUPABASE_URL or SUPABASE_KEY (service role) for ingestion');
+  }
+
+  return createClient<Database>(supabaseUrl, supabaseServiceKey);
+}
 
 const rssParser = new Parser({
   // Make xml2js more forgiving so that bad entities like unescaped '&' don't
@@ -63,6 +67,7 @@ interface GeminiEnriched {
 }
 
 export async function runRealtimeIngestion(options?: { includeIndustry?: boolean }) {
+  const supabase = createServerSupabaseClient();
   const includeIndustry = options?.includeIndustry !== false;
   const feedItems: FeedItem[] = [];
 
