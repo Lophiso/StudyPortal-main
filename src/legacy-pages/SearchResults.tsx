@@ -61,7 +61,7 @@ export default function SearchResults() {
         .order('title');
 
       if (error) throw error;
-      setPrograms(data || []);
+      setPrograms((data ?? []) as Program[]);
     } catch (error) {
       console.error('Error fetching programs:', error);
     } finally {

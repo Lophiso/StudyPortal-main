@@ -25,13 +25,15 @@ export default function PhdDetail() {
       return;
     }
 
+    const jobId = id;
+
     async function loadJob() {
       setLoading(true);
       setError(null);
       const { data, error } = await supabase
         .from('JobOpportunity')
         .select('*')
-        .eq('id', id)
+        .eq('id', jobId)
         .single();
 
       if (error) {
@@ -50,10 +52,12 @@ export default function PhdDetail() {
   useEffect(() => {
     if (!job) return;
 
+    const jobId = job.id;
+
     async function loadSummary() {
       setSummary({ loading: true, error: null, text: null });
       try {
-        const res = await fetch(`/api/summarize-job?id=${encodeURIComponent(job.id)}&type=PHD`);
+        const res = await fetch(`/api/summarize-job?id=${encodeURIComponent(jobId)}&type=PHD`);
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }

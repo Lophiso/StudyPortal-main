@@ -19,15 +19,22 @@ export default function ProgramDetail() {
   const fetchProgram = async () => {
     if (!id) return;
 
+    const programId = Number(id);
+    if (!Number.isFinite(programId)) {
+      setProgram(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('programs')
         .select('*')
-        .eq('id', id)
+        .eq('id', programId)
         .maybeSingle();
 
       if (error) throw error;
-      setProgram(data);
+      setProgram((data ?? null) as Program | null);
     } catch (error) {
       console.error('Error fetching program:', error);
     } finally {

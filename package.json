@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -23,6 +23,7 @@
     "dotenv": "^16.4.5",
     "groq-sdk": "^0.37.0",
     "lucide-react": "^0.344.0",
+    "next": "^15.1.0",
     "prisma": "^7.1.0",
     "puppeteer-core": "^24.32.1",
     "react": "^18.3.1",

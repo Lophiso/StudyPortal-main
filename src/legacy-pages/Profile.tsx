@@ -5,10 +5,13 @@ import { supabase } from '../lib/supabase';
 import type { Profile } from '../lib/database.types';
 import Navbar from '../components/Navbar';
 
-type EditableProfileFields = Pick<
-  Profile,
-  'full_name' | 'bio' | 'education_level' | 'study_interests' | 'phone_number'
->;
+type EditableProfileFields = {
+  full_name: string;
+  bio: string;
+  education_level: string;
+  study_interests: string;
+  phone_number: string;
+};
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -86,7 +89,7 @@ export default function ProfilePage() {
     setSaving(true);
     setMessage(null);
 
-    const updates: Partial<Profile> = {
+    const updates: import('../lib/database.types').Database['public']['Tables']['profiles']['Insert'] = {
       id: user.id,
       full_name: form.full_name,
       bio: form.bio,

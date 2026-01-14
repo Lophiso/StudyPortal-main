@@ -28,11 +28,18 @@ async function launchBrowser(): Promise<Browser> {
   if (isProd) {
     const executablePath = await chromium.executablePath();
 
+    const defaultViewport =
+      ((chromium as unknown as { defaultViewport?: NonNullable<Parameters<typeof puppeteer.launch>[0]>['defaultViewport'] })
+        .defaultViewport ?? { width: 1280, height: 720 });
+
+    const headless =
+      ((chromium as unknown as { headless?: boolean }).headless ?? true);
+
     return puppeteer.launch({
       args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
+      defaultViewport,
       executablePath,
-      headless: chromium.headless,
+      headless,
     });
   }
 

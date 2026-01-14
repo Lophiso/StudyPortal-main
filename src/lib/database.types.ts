@@ -38,6 +38,7 @@ export type Database = {
           description?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       profiles: {
         Row: {
@@ -73,6 +74,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       bookmarks: {
         Row: {
@@ -93,6 +95,7 @@ export type Database = {
           program_id?: number;
           created_at?: string;
         };
+        Relationships: [];
       };
       JobOpportunity: {
         Row: {
@@ -146,8 +149,13 @@ export type Database = {
           applicationLink?: string;
           source?: string;
         };
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 };
 

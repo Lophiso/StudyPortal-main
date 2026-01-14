@@ -107,9 +107,9 @@ interface PhdResultsProps {
   jobs: JobOpportunity[];
   query: string;
   selectedCountries: string[];
-  setSelectedCountries: (countries: string[]) => void;
+  setSelectedCountries: React.Dispatch<React.SetStateAction<string[]>>;
   activeKeyword: string | null;
-  setActiveKeyword: (kw: string | null) => void;
+  setActiveKeyword: React.Dispatch<React.SetStateAction<string | null>>;
   keywordChips: string[];
   onNavigate: (to: string) => void;
 }

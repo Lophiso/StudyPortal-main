@@ -34,7 +34,7 @@ export default function Home() {
           throw supabaseError;
         }
 
-        setPrograms(data ?? []);
+        setPrograms((data ?? []) as Program[]);
       } catch (err) {
         console.error('Error fetching programs:', err);
         setError('Failed to load programs. Please try again later.');
