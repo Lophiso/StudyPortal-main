@@ -101,6 +101,9 @@ export type Database = {
         Row: {
           id: string;
           createdAt: string;
+          department: string;
+          funding_status: string;
+          full_title: string;
           title: string;
           type: 'PHD' | 'JOB';
           isPhd: boolean | null;
@@ -118,6 +121,9 @@ export type Database = {
         Insert: {
           id?: string;
           createdAt?: string;
+          department: string;
+          funding_status: string;
+          full_title: string;
           title: string;
           type: 'PHD' | 'JOB';
           isPhd?: boolean | null;
@@ -135,6 +141,9 @@ export type Database = {
         Update: {
           id?: string;
           createdAt?: string;
+          department?: string;
+          funding_status?: string;
+          full_title?: string;
           title?: string;
           type?: 'PHD' | 'JOB';
           isPhd?: boolean | null;

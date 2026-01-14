@@ -92,7 +92,7 @@ export default function PhdDetailPage() {
         {!loading && !error && job && (
           <article className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <header className="mb-4">
-              <h1 className="text-2xl font-semibold text-[#002147] mb-1">{job.title}</h1>
+              <h1 className="text-2xl font-semibold text-[#002147] mb-1">{job.full_title || job.title}</h1>
               <p className="text-sm text-gray-700 mb-1">{job.company}</p>
               <p className="text-xs text-gray-500 mb-1">{[job.city, job.country].filter(Boolean).join(', ')}</p>
               <div className="text-xs text-gray-600 space-y-1 mt-2">

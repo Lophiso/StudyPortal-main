@@ -60,6 +60,9 @@ interface FeedItem {
 
 interface GeminiEnriched {
   title: string | null;
+  full_title: string | null;
+  department: string | null;
+  funding_status: string | null;
   city: string | null;
   country: string | null;
   requirements: string[];
@@ -415,6 +418,9 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
             type: SchemaType.OBJECT,
             properties: {
               title: { type: SchemaType.STRING, nullable: true },
+              full_title: { type: SchemaType.STRING, nullable: true },
+              department: { type: SchemaType.STRING, nullable: true },
+              funding_status: { type: SchemaType.STRING, nullable: true },
               city: { type: SchemaType.STRING, nullable: true },
               country: { type: SchemaType.STRING, nullable: true },
               isPhD: { type: SchemaType.BOOLEAN },
@@ -499,10 +505,14 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
           const prompt = `You are enriching job and PhD opportunity posts for a database.
 Analyze the following text and:
 0) Produce a professional, shortened title (max 60 characters).
+   - Preserve the original (full) title separately as full_title.
 1) Detect the main language (ISO 639-1 code if possible).
 2) Provide a concise English Markdown summary (3-5 sentences + 3-5 bullet points).
 3) Return a JSON object with fields:
-   - title: string | null (max 60 characters)
+   - title: string (max 60 characters)
+   - full_title: string (original full title)
+   - department: string (e.g., "Computer Science"; use "TBA" if missing)
+   - funding_status: string (e.g., "Fully Funded"; use "TBA" if missing)
    - city: string | null
    - country: string | null
    - isPhD: boolean (true if this is clearly a PhD/doctoral opportunity)
@@ -510,6 +520,10 @@ Analyze the following text and:
    - requirements: string[] (short bullet-style requirement sentences)
    - language: string | null (language code or name)
    - summaryEn: string | null (concise English Markdown summary)
+
+Important rules:
+- Never return the literal string "Unknown" for any field.
+- If a value is not present, return "TBA" (or null only where the schema explicitly allows null).
 
 Text:
 Source title: ${item.title}
@@ -525,6 +539,9 @@ ${contentMarkdown}`;
             const parsed = JSON.parse(text) as Partial<GeminiEnriched>;
             enriched = {
               title: parsed.title ?? null,
+              full_title: parsed.full_title ?? null,
+              department: parsed.department ?? null,
+              funding_status: parsed.funding_status ?? null,
               city: parsed.city ?? null,
               country: parsed.country ?? null,
               isPhD: Boolean(parsed.isPhD),
@@ -545,6 +562,9 @@ ${contentMarkdown}`;
         const isPhD = /phd|ph\.d|doctoral|doctorate/.test(text);
         enriched = {
           title: null,
+          full_title: null,
+          department: null,
+          funding_status: null,
           city: null,
           country: null,
           isPhD,
@@ -557,7 +577,10 @@ ${contentMarkdown}`;
 
       const city = enriched.city || '';
       const country = enriched.country || '';
-      const cleanedTitle = enriched.title ? truncateTitle(enriched.title) : truncateTitle(item.title);
+      const fullTitle = (enriched.full_title ?? item.title ?? '').toString().trim() || 'TBA';
+      const cleanedTitle = enriched.title ? truncateTitle(enriched.title) : truncateTitle(fullTitle);
+      const department = (enriched.department ?? '').toString().trim() || 'TBA';
+      const fundingStatus = (enriched.funding_status ?? '').toString().trim() || 'TBA';
       const requirements = enriched.requirements && enriched.requirements.length > 0
         ? enriched.requirements
         : ['See full description for details.'];
@@ -586,15 +609,18 @@ ${contentMarkdown}`;
       const postedAtIso = item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString();
 
       const payload: Database['public']['Tables']['JobOpportunity']['Insert'] = {
+        department,
+        funding_status: fundingStatus,
+        full_title: fullTitle,
         title: cleanedTitle,
         type,
         company: item.source.includes('weworkremotely.com')
           ? 'We Work Remotely'
           : item.source.includes('timeshighereducation.com') || item.source.includes('findaphd.com')
           ? 'Various Universities'
-          : 'Unknown',
-        country: country || 'Unknown',
-        city: city || 'Unknown',
+          : 'TBA',
+        country: country || 'TBA',
+        city: city || 'TBA',
         description: enriched.summaryEn ?? contentMarkdown,
         requirements,
         deadline,

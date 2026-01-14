@@ -99,7 +99,7 @@ export default function JobDetailPage() {
                     Job
                   </span>
                 </div>
-                <h1 className="text-2xl md:text-3xl font-bold mb-2 leading-snug">{job.title}</h1>
+                <h1 className="text-2xl md:text-3xl font-bold mb-2 leading-snug">{job.full_title || job.title}</h1>
                 {job.company && <p className="text-sm opacity-90 mb-1">{job.company}</p>}
                 <div className="flex flex-wrap items-center gap-4 text-xs opacity-90 mt-2">
                   {(job.city || job.country) && (

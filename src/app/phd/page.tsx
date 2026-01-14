@@ -425,11 +425,11 @@ function PhdResults({
                     {job.title}
                   </h3>
 
-                  {job.company && job.company !== 'Unknown' && (
-                    <p className="text-sm font-semibold text-red-600 mb-3">
-                      {job.company}
-                    </p>
-                  )}
+                  <p className="text-sm font-semibold text-red-600 mb-3">
+                    {(job.company || 'TBA').toString()}
+                    {' > '}
+                    {(job.department || 'TBA').toString()}
+                  </p>
 
                   <div
                     className="text-sm text-gray-700 overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]"
@@ -447,7 +447,7 @@ function PhdResults({
                       🎓 PhD
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border">
-                      💰 Unspecified
+                      💰 {(job.funding_status || 'TBA').toString()}
                     </span>
                   </div>
 
