@@ -47,13 +47,11 @@ export async function GET(request: Request) {
     const kindLabel = type === 'PHD' ? 'PhD / doctoral position' : 'job opportunity';
 
     const prompt = `You are helping summarize a ${kindLabel} for a student-facing portal.
-Summarize the opportunity in a short paragraph (3-5 sentences) that covers:
-- research / role focus
-- institution or employer
-- location
-- any key requirements or background
+Return the answer strictly in Markdown.
 
-Then list 3-5 concise bullet points with the most important details.
+Write:
+1) A short paragraph (3-5 sentences) covering: focus, institution/employer, location, and key requirements.
+2) Then a Markdown bullet list with 3-5 bullets of the most important details.
 
 Title: ${job.title}
 Company/Institution: ${job.company}

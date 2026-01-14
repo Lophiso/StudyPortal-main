@@ -149,7 +149,9 @@ export default function JobDetailPage() {
 
                 <section>
                   <h2 className="text-sm font-semibold text-[#002147] mb-2">Full description</h2>
-                  <p className="text-xs text-gray-700 whitespace-pre-line">{job.description}</p>
+                  <div className="prose prose-slate max-w-none text-xs">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.description}</ReactMarkdown>
+                  </div>
                 </section>
 
                 <p className="text-[11px] text-gray-500">Source: {job.source}</p>

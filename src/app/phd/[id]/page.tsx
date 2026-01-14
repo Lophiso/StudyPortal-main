@@ -123,7 +123,9 @@ export default function PhdDetailPage() {
 
             <section className="mb-4">
               <h2 className="text-sm font-semibold text-[#002147] mb-1">Description</h2>
-              <p className="text-xs text-gray-700 whitespace-pre-line">{job.description}</p>
+              <div className="prose prose-slate max-w-none text-xs">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.description}</ReactMarkdown>
+              </div>
             </section>
 
             {job.requirements && job.requirements.length > 0 && (
