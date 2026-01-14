@@ -1,18 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { MapPin, Clock, Search } from 'lucide-react';
-import Navbar from '../components/Navbar';
-import { supabase } from '../lib/supabase';
-import type { JobOpportunity } from '../lib/database.types';
+'use client';
 
-export default function PhdPositions() {
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Search } from 'lucide-react';
+import NavbarNext from '../../components/NavbarNext';
+import { supabase } from '../../lib/supabase';
+import type { JobOpportunity } from '../../lib/database.types';
+
+export default function PhdPage() {
   const [jobs, setJobs] = useState<JobOpportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [activeKeyword, setActiveKeyword] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const keywordChips = ['AI / Data', 'Robotics', 'Climate', 'Europe', 'Remote'];
 
@@ -42,16 +44,14 @@ export default function PhdPositions() {
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
-      <Navbar />
+      <NavbarNext />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-[#002147] mb-2">PhD Positions</h1>
             <p className="text-gray-600 text-sm max-w-2xl">
-              Curated doctoral and PhD opportunities from leading universities and research
-              institutes. Each listing includes key details about location, deadline, and how
-              to apply.
+              Curated doctoral and PhD opportunities from leading universities and research institutes.
             </p>
           </div>
 
@@ -68,21 +68,16 @@ export default function PhdPositions() {
         </div>
 
         {loading && (
-          <div className="bg-white rounded-lg shadow-md p-6 text-sm text-gray-600">
-            Loading PhD positions…
-          </div>
+          <div className="bg-white rounded-lg shadow-md p-6 text-sm text-gray-600">Loading PhD positions…</div>
         )}
 
         {error && !loading && (
-          <div className="bg-white rounded-lg shadow-md p-6 text-sm text-red-600 mb-4">
-            {error}
-          </div>
+          <div className="bg-white rounded-lg shadow-md p-6 text-sm text-red-600 mb-4">{error}</div>
         )}
 
         {!loading && !error && jobs.length === 0 && (
           <div className="bg-white rounded-lg shadow-md p-6 text-sm text-gray-600">
-            No PhD positions have been synced yet. The engine will populate this list
-            automatically after the next sync.
+            No PhD positions have been synced yet. The engine will populate this list automatically after the next sync.
           </div>
         )}
 
@@ -95,7 +90,7 @@ export default function PhdPositions() {
             activeKeyword={activeKeyword}
             setActiveKeyword={setActiveKeyword}
             keywordChips={keywordChips}
-            onNavigate={navigate}
+            onNavigate={(to) => router.push(to)}
           />
         )}
       </div>
@@ -124,36 +119,30 @@ function PhdResults({
   keywordChips,
   onNavigate,
 }: PhdResultsProps) {
-  const availableCountries = useMemo(
-    () =>
-      [
-        'USA',
-        'Canada',
-        'Germany',
-        'Netherlands',
-        'Italy',
-        'Belgium',
-        'France',
-        'Denmark',
-        'Australia',
-        'Switzerland',
-        'Norway',
-        'Sweden',
-        'Austria',
-        'Ireland',
-      ],
-    [],
-  );
+  const availableCountries = [
+    'USA',
+    'Canada',
+    'Germany',
+    'Netherlands',
+    'Italy',
+    'Belgium',
+    'France',
+    'Denmark',
+    'Australia',
+    'Switzerland',
+    'Norway',
+    'Sweden',
+    'Austria',
+    'Ireland',
+  ];
 
-  const filtered = useMemo(() => {
+  const filtered = (() => {
     let list = [...jobs];
 
     const normalizedQuery = query.trim().toLowerCase();
     if (normalizedQuery) {
       list = list.filter((job) => {
-        const text = `${job.title ?? ''} ${job.company ?? ''} ${job.city ?? ''} ${
-          job.country ?? ''
-        } ${job.description ?? ''}`
+        const text = `${job.title ?? ''} ${job.company ?? ''} ${job.city ?? ''} ${job.country ?? ''} ${job.description ?? ''}`
           .toString()
           .toLowerCase();
         return text.includes(normalizedQuery);
@@ -170,9 +159,7 @@ function PhdResults({
     if (activeKeyword) {
       const kw = activeKeyword.toLowerCase();
       list = list.filter((job) => {
-        const text = `${job.title ?? ''} ${job.description ?? ''}`
-          .toString()
-          .toLowerCase();
+        const text = `${job.title ?? ''} ${job.description ?? ''}`.toString().toLowerCase();
 
         if (kw.includes('ai')) {
           return /ai|artificial intelligence|machine learning|data science/.test(text);
@@ -197,17 +184,14 @@ function PhdResults({
     }
 
     return list;
-  }, [jobs, query, selectedCountries, activeKeyword]);
+  })();
 
   const handleCountryToggle = (country: string) => {
-    setSelectedCountries((prev) =>
-      prev.includes(country) ? prev.filter((c) => c !== country) : [...prev, country],
-    );
+    setSelectedCountries((prev) => (prev.includes(country) ? prev.filter((c) => c !== country) : [...prev, country]));
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      {/* Filters Sidebar */}
       <div className="lg:col-span-1">
         <div className="bg-white rounded-lg shadow-md p-6 sticky top-6">
           <div className="flex items-center mb-4">
@@ -215,7 +199,6 @@ function PhdResults({
             <h2 className="text-lg font-semibold text-[#002147]">Filters</h2>
           </div>
 
-          {/* Country Filter */}
           <div className="mb-6">
             <h3 className="font-semibold text-[#002147] mb-3">Country</h3>
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
@@ -230,13 +213,9 @@ function PhdResults({
                   <span className="ml-2 text-gray-700">{country}</span>
                 </label>
               ))}
-              {availableCountries.length === 0 && (
-                <p className="text-xs text-gray-500">Countries will appear as new PhDs sync.</p>
-              )}
             </div>
           </div>
 
-          {/* Keyword chips */}
           <div className="mb-4">
             <h3 className="font-semibold text-[#002147] mb-3">Topics</h3>
             <div className="flex flex-wrap gap-2">
@@ -244,9 +223,7 @@ function PhdResults({
                 <button
                   key={label}
                   type="button"
-                  onClick={() =>
-                    setActiveKeyword((current) => (current === label ? null : label))
-                  }
+                  onClick={() => setActiveKeyword((current) => (current === label ? null : label))}
                   className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-colors ${
                     activeKeyword === label
                       ? 'bg-[#002147] text-white border-[#002147]'
@@ -272,7 +249,6 @@ function PhdResults({
         </div>
       </div>
 
-      {/* PhD Positions Grid */}
       <div className="lg:col-span-3">
         <div className="flex items-center justify-between mb-4 text-sm text-gray-600">
           <p>
@@ -286,72 +262,43 @@ function PhdResults({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {filtered.map((job) => {
-              const hasCompany = job.company && job.company !== 'Unknown';
-              const hasCity = job.city && job.city !== 'Unknown';
-              const hasCountry = job.country && job.country !== 'Unknown';
-
-              return (
-                <div
-                  key={job.id}
-                  className="bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-200 overflow-hidden cursor-pointer"
-                  onClick={() => onNavigate(`/phd/${job.id}`)}
-                >
-                  <div className="p-6 flex flex-col h-full">
-                    <div className="flex items-start justify-between mb-3">
-                      <span className="inline-block px-3 py-1 text-xs font-semibold text-white bg-[#002147] rounded-full">
-                        PhD
-                      </span>
-                      <div className="text-right text-xs text-gray-600 space-y-1">
-                        {job.deadline && (
-                          <p>
-                            <span className="font-semibold">Deadline:</span>{' '}
-                            {new Date(job.deadline).toLocaleDateString()}
-                          </p>
-                        )}
+            {filtered.map((job) => (
+              <div
+                key={job.id}
+                className="bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-200 overflow-hidden cursor-pointer"
+                onClick={() => onNavigate(`/phd/${job.id}`)}
+              >
+                <div className="p-6 flex flex-col h-full">
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="inline-block px-3 py-1 text-xs font-semibold text-white bg-[#002147] rounded-full">
+                      PhD
+                    </span>
+                    <div className="text-right text-xs text-gray-600 space-y-1">
+                      {job.deadline && (
                         <p>
-                          <span className="font-semibold">Posted:</span>{' '}
-                          {new Date(job.postedAt).toLocaleDateString()}
+                          <span className="font-semibold">Deadline:</span> {new Date(job.deadline).toLocaleDateString()}
                         </p>
-                      </div>
-                    </div>
-
-                    <h3 className="text-xl font-bold text-[#002147] mb-2 line-clamp-2">
-                      {job.title}
-                    </h3>
-
-                    {hasCompany && (
-                      <p className="text-gray-700 font-medium mb-2 text-sm">{job.company}</p>
-                    )}
-
-                    <div className="space-y-2 text-sm text-gray-600 mb-3">
-                      {(hasCity || hasCountry) && (
-                        <div className="flex items-center">
-                          <MapPin className="h-4 w-4 mr-2 text-gray-400" />
-                          <span>
-                            {[hasCity ? job.city : null, hasCountry ? job.country : null]
-                              .filter(Boolean)
-                              .join(', ')}
-                          </span>
-                        </div>
                       )}
-                      <div className="flex items-center">
-                        <Clock className="h-4 w-4 mr-2 text-gray-400" />
-                        <span>Application via original website</span>
-                      </div>
+                      <p>
+                        <span className="font-semibold">Posted:</span> {new Date(job.postedAt).toLocaleDateString()}
+                      </p>
                     </div>
-
-                    <p className="text-gray-600 text-sm line-clamp-3 mb-4">
-                      {job.description}
-                    </p>
-
-                    <button className="mt-auto w-full bg-[#FF9900] hover:bg-[#e68a00] text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200">
-                      View Details
-                    </button>
                   </div>
+
+                  <h3 className="text-xl font-bold text-[#002147] mb-2 line-clamp-2">{job.title}</h3>
+
+                  {job.company && job.company !== 'Unknown' && (
+                    <p className="text-gray-700 font-medium mb-2 text-sm">{job.company}</p>
+                  )}
+
+                  <p className="text-gray-600 text-sm line-clamp-3 mb-4">{job.description}</p>
+
+                  <button className="mt-auto w-full bg-[#FF9900] hover:bg-[#e68a00] text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200">
+                    View Details
+                  </button>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>

@@ -1,14 +1,30 @@
-import { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import type { Program } from '../lib/database.types';
-import { MapPin, DollarSign, Clock, Search, Heart } from 'lucide-react';
-import Navbar from '../components/Navbar';
-import { useAuth } from '../lib/auth';
+'use client';
 
-export default function SearchResults() {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { MapPin, Clock, Search, Heart } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import type { Program } from '../../lib/database.types';
+import NavbarNext from '../../components/NavbarNext';
+import { useAuth } from '../../lib/auth';
+
+export default function SearchPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
+          <div className="text-[#002147] text-xl">Loading programs...</div>
+        </div>
+      }
+    >
+      <SearchPageInner />
+    </Suspense>
+  );
+}
+
+function SearchPageInner() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const { user } = useAuth();
 
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -21,13 +37,24 @@ export default function SearchResults() {
   const [bookmarkedProgramIds, setBookmarkedProgramIds] = useState<number[]>([]);
   const [bookmarkBusyId, setBookmarkBusyId] = useState<number | null>(null);
 
-  useEffect(() => {
-    fetchPrograms();
-  }, []);
+  const searchParamsString = searchParams.toString();
 
   useEffect(() => {
-    applyFilters();
-  }, [programs, selectedCountries, maxTuition, selectedLevel, searchParams]);
+    const fetchPrograms = async () => {
+      try {
+        const { data, error } = await supabase.from('programs').select('*').order('title');
+
+        if (error) throw error;
+        setPrograms((data ?? []) as Program[]);
+      } catch (error) {
+        console.error('Error fetching programs:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchPrograms();
+  }, []);
 
   useEffect(() => {
     const fetchBookmarks = async () => {
@@ -53,65 +80,51 @@ export default function SearchResults() {
     void fetchBookmarks();
   }, [user]);
 
-  const fetchPrograms = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('programs')
-        .select('*')
-        .order('title');
+  useEffect(() => {
+    const applyFilters = () => {
+      let filtered = [...programs];
 
-      if (error) throw error;
-      setPrograms((data ?? []) as Program[]);
-    } catch (error) {
-      console.error('Error fetching programs:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      const query = searchParams.get('q')?.toLowerCase();
+      if (query) {
+        filtered = filtered.filter(
+          (p) =>
+            p.title.toLowerCase().includes(query) ||
+            p.university.toLowerCase().includes(query) ||
+            p.description.toLowerCase().includes(query),
+        );
+      }
 
-  const applyFilters = () => {
-    let filtered = [...programs];
+      const urlCountry = searchParams.get('country');
+      if (urlCountry) {
+        filtered = filtered.filter((p) => p.country === urlCountry);
+      } else if (selectedCountries.length > 0) {
+        filtered = filtered.filter((p) => selectedCountries.includes(p.country));
+      }
 
-    const query = searchParams.get('q')?.toLowerCase();
-    if (query) {
-      filtered = filtered.filter(
-        (p) =>
-          p.title.toLowerCase().includes(query) ||
-          p.university.toLowerCase().includes(query) ||
-          p.description.toLowerCase().includes(query)
-      );
-    }
+      const urlLevel = searchParams.get('level');
+      const levelFilter = urlLevel || selectedLevel;
+      if (levelFilter) {
+        filtered = filtered.filter((p) => p.study_level === levelFilter);
+      }
 
-    const urlCountry = searchParams.get('country');
-    if (urlCountry) {
-      filtered = filtered.filter((p) => p.country === urlCountry);
-    } else if (selectedCountries.length > 0) {
-      filtered = filtered.filter((p) => selectedCountries.includes(p.country));
-    }
+      filtered = filtered.filter((p) => {
+        let feeInUSD = p.tuition_fee;
+        if (p.currency === 'GBP') feeInUSD *= 1.27;
+        if (p.currency === 'EUR') feeInUSD *= 1.08;
+        return feeInUSD <= maxTuition;
+      });
 
-    const urlLevel = searchParams.get('level');
-    const levelFilter = urlLevel || selectedLevel;
-    if (levelFilter) {
-      filtered = filtered.filter((p) => p.study_level === levelFilter);
-    }
+      setFilteredPrograms(filtered);
+    };
 
-    filtered = filtered.filter((p) => {
-      let feeInUSD = p.tuition_fee;
-      if (p.currency === 'GBP') feeInUSD *= 1.27;
-      if (p.currency === 'EUR') feeInUSD *= 1.08;
-      return feeInUSD <= maxTuition;
-    });
+    applyFilters();
+  }, [programs, selectedCountries, maxTuition, selectedLevel, searchParamsString, searchParams]);
 
-    setFilteredPrograms(filtered);
-  };
+  const availableCountries = useMemo(() => Array.from(new Set(programs.map((p) => p.country))), [programs]);
 
   const handleCountryToggle = (country: string) => {
-    setSelectedCountries((prev) =>
-      prev.includes(country) ? prev.filter((c) => c !== country) : [...prev, country]
-    );
+    setSelectedCountries((prev) => (prev.includes(country) ? prev.filter((c) => c !== country) : [...prev, country]));
   };
-
-  const availableCountries = Array.from(new Set(programs.map((p) => p.country)));
 
   const formatCurrency = (amount: number, currency: string) => {
     const symbols: { [key: string]: string } = {
@@ -124,7 +137,7 @@ export default function SearchResults() {
 
   const toggleBookmark = async (programId: number) => {
     if (!user) {
-      navigate('/auth');
+      router.push('/auth');
       return;
     }
 
@@ -144,12 +157,10 @@ export default function SearchResults() {
 
         setBookmarkedProgramIds((prev) => prev.filter((id) => id !== programId));
       } else {
-        const { error: insertError } = await (supabase as any)
-          .from('bookmarks')
-          .insert({
-            user_id: user.id,
-            program_id: programId,
-          });
+        const { error: insertError } = await supabase.from('bookmarks').insert({
+          user_id: user.id,
+          program_id: programId,
+        });
 
         if (insertError) throw insertError;
 
@@ -172,7 +183,7 @@ export default function SearchResults() {
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
-      <Navbar />
+      <NavbarNext />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
@@ -183,7 +194,6 @@ export default function SearchResults() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Filters Sidebar */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-md p-6 sticky top-6">
               <div className="flex items-center mb-4">
@@ -191,7 +201,6 @@ export default function SearchResults() {
                 <h2 className="text-lg font-semibold text-[#002147]">Filters</h2>
               </div>
 
-              {/* Country Filter */}
               <div className="mb-6">
                 <h3 className="font-semibold text-[#002147] mb-3">Country</h3>
                 <div className="space-y-2">
@@ -209,7 +218,6 @@ export default function SearchResults() {
                 </div>
               </div>
 
-              {/* Max Tuition Filter */}
               <div className="mb-6">
                 <h3 className="font-semibold text-[#002147] mb-3">Max Tuition (USD)</h3>
                 <input
@@ -221,12 +229,9 @@ export default function SearchResults() {
                   onChange={(e) => setMaxTuition(Number(e.target.value))}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#FF9900]"
                 />
-                <div className="text-sm text-gray-600 mt-2">
-                  Up to ${maxTuition.toLocaleString()}
-                </div>
+                <div className="text-sm text-gray-600 mt-2">Up to ${maxTuition.toLocaleString()}</div>
               </div>
 
-              {/* Study Level Filter */}
               <div className="mb-4">
                 <h3 className="font-semibold text-[#002147] mb-3">Study Level</h3>
                 <select
@@ -242,6 +247,7 @@ export default function SearchResults() {
               </div>
 
               <button
+                type="button"
                 onClick={() => {
                   setSelectedCountries([]);
                   setMaxTuition(100000);
@@ -254,13 +260,13 @@ export default function SearchResults() {
             </div>
           </div>
 
-          {/* Programs Grid */}
           <div className="lg:col-span-3">
             {filteredPrograms.length === 0 ? (
               <div className="bg-white rounded-lg shadow-md p-12 text-center">
                 <p className="text-gray-600 text-lg">No programs found matching your criteria.</p>
                 <button
-                  onClick={() => navigate('/')}
+                  type="button"
+                  onClick={() => router.push('/')}
                   className="mt-4 bg-[#FF9900] hover:bg-[#e68a00] text-white font-semibold py-2 px-6 rounded-lg transition-colors"
                 >
                   Back to Home
@@ -272,7 +278,7 @@ export default function SearchResults() {
                   <div
                     key={program.id}
                     className="bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-200 overflow-hidden cursor-pointer"
-                    onClick={() => navigate(`/program/${program.id}`)}
+                    onClick={() => router.push(`/program/${program.id}`)}
                   >
                     <div className="p-6">
                       <div className="flex items-start justify-between mb-3">
@@ -292,9 +298,7 @@ export default function SearchResults() {
                             disabled={bookmarkBusyId === program.id}
                             className="text-[#FF9900] hover:text-[#e68a00] disabled:opacity-60"
                             aria-label={
-                              bookmarkedProgramIds.includes(program.id)
-                                ? 'Remove bookmark'
-                                : 'Save program'
+                              bookmarkedProgramIds.includes(program.id) ? 'Remove bookmark' : 'Save program'
                             }
                           >
                             <Heart
@@ -305,9 +309,7 @@ export default function SearchResults() {
                         </div>
                       </div>
 
-                      <h3 className="text-xl font-bold text-[#002147] mb-2 line-clamp-2">
-                        {program.title}
-                      </h3>
+                      <h3 className="text-xl font-bold text-[#002147] mb-2 line-clamp-2">{program.title}</h3>
 
                       <p className="text-gray-700 font-medium mb-3">{program.university}</p>
 
@@ -322,9 +324,7 @@ export default function SearchResults() {
                         </div>
                       </div>
 
-                      <p className="text-gray-600 text-sm line-clamp-2 mb-4">
-                        {program.description}
-                      </p>
+                      <p className="text-gray-600 text-sm line-clamp-2 mb-4">{program.description}</p>
 
                       <button className="w-full bg-[#FF9900] hover:bg-[#e68a00] text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200">
                         View Details

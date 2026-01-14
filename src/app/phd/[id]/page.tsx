@@ -1,8 +1,10 @@
+'use client';
+
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import Navbar from '../components/Navbar';
-import { supabase } from '../lib/supabase';
-import type { JobOpportunity } from '../lib/database.types';
+import { useParams, useRouter } from 'next/navigation';
+import NavbarNext from '../../../components/NavbarNext';
+import { supabase } from '../../../lib/supabase';
+import type { JobOpportunity } from '../../../lib/database.types';
 
 interface SummaryState {
   loading: boolean;
@@ -10,15 +12,17 @@ interface SummaryState {
   text: string | null;
 }
 
-export default function PhdDetail() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+export default function PhdDetailPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [job, setJob] = useState<JobOpportunity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryState>({ loading: false, error: null, text: null });
 
   useEffect(() => {
+    const id = params?.id;
+
     if (!id) {
       setError('Missing job identifier.');
       setLoading(false);
@@ -30,11 +34,7 @@ export default function PhdDetail() {
     async function loadJob() {
       setLoading(true);
       setError(null);
-      const { data, error } = await supabase
-        .from('JobOpportunity')
-        .select('*')
-        .eq('id', jobId)
-        .single();
+      const { data, error } = await supabase.from('JobOpportunity').select('*').eq('id', jobId).single();
 
       if (error) {
         console.error('Failed to load PhD opportunity', error);
@@ -47,7 +47,7 @@ export default function PhdDetail() {
     }
 
     void loadJob();
-  }, [id]);
+  }, [params]);
 
   useEffect(() => {
     if (!job) return;
@@ -74,11 +74,11 @@ export default function PhdDetail() {
 
   return (
     <div className="min-h-screen bg-[#F5F7FB]">
-      <Navbar />
+      <NavbarNext />
       <main className="max-w-4xl mx-auto px-4 py-10">
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={() => router.back()}
           className="mb-4 text-xs text-[#002147] hover:underline"
         >
           ← Back to PhD Positions
@@ -92,34 +92,26 @@ export default function PhdDetail() {
             <header className="mb-4">
               <h1 className="text-2xl font-semibold text-[#002147] mb-1">{job.title}</h1>
               <p className="text-sm text-gray-700 mb-1">{job.company}</p>
-              <p className="text-xs text-gray-500 mb-1">
-                {[job.city, job.country].filter(Boolean).join(', ')}
-              </p>
+              <p className="text-xs text-gray-500 mb-1">{[job.city, job.country].filter(Boolean).join(', ')}</p>
               <div className="text-xs text-gray-600 space-y-1 mt-2">
                 <p>
                   <span className="font-medium">Type:</span> PhD / Doctoral position
                 </p>
                 {job.deadline && (
                   <p>
-                    <span className="font-medium">Deadline:</span>{' '}
-                    {new Date(job.deadline).toLocaleDateString()}
+                    <span className="font-medium">Deadline:</span> {new Date(job.deadline).toLocaleDateString()}
                   </p>
                 )}
                 <p>
-                  <span className="font-medium">Posted:</span>{' '}
-                  {new Date(job.postedAt).toLocaleDateString()}
+                  <span className="font-medium">Posted:</span> {new Date(job.postedAt).toLocaleDateString()}
                 </p>
               </div>
             </header>
 
             <section className="mb-4">
               <h2 className="text-sm font-semibold text-[#002147] mb-1">AI summary</h2>
-              {summary.loading && (
-                <p className="text-xs text-gray-600">Generating a brief overview with AI…</p>
-              )}
-              {!summary.loading && summary.error && (
-                <p className="text-xs text-gray-600">{summary.error}</p>
-              )}
+              {summary.loading && <p className="text-xs text-gray-600">Generating a brief overview with AI…</p>}
+              {!summary.loading && summary.error && <p className="text-xs text-gray-600">{summary.error}</p>}
               {!summary.loading && summary.text && (
                 <p className="text-xs text-gray-700 whitespace-pre-line">{summary.text}</p>
               )}

@@ -1,31 +1,28 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import Groq from 'groq-sdk';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_KEY;
+export async function GET(request: Request) {
+  const url = new URL(request.url);
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error('SUPABASE_URL and SUPABASE_KEY must be set');
-}
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
-  }
-
-  const id = typeof req.query.id === 'string' ? req.query.id : null;
-  const type = typeof req.query.type === 'string' ? req.query.type : null;
+  const id = url.searchParams.get('id');
+  const type = url.searchParams.get('type');
 
   if (!id) {
-    res.status(400).json({ error: 'Missing id parameter' });
-    return;
+    return NextResponse.json({ error: 'Missing id parameter' }, { status: 400 });
   }
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_KEY;
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return NextResponse.json(
+      { error: 'SUPABASE_URL and SUPABASE_KEY must be set' },
+      { status: 500 },
+    );
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   const { data, error } = await supabase
     .from('JobOpportunity')
@@ -34,11 +31,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .single();
 
   if (error || !data) {
-    res.status(404).json({ error: 'Opportunity not found' });
-    return;
+    return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 });
   }
 
   const job = data as any;
+
+  const groqApiKey = process.env.GROQ_API_KEY || '';
+  if (!groqApiKey) {
+    return NextResponse.json({ summary: null }, { status: 200 });
+  }
+
+  const groq = new Groq({ apiKey: groqApiKey });
 
   try {
     const kindLabel = type === 'PHD' ? 'PhD / doctoral position' : 'job opportunity';
@@ -59,7 +62,6 @@ Description: ${job.description}
 Requirements: ${(job.requirements || []).join(' | ')}`;
 
     const completion = await groq.chat.completions.create({
-      // Use a current Groq Llama 3.1 chat model.
       model: 'llama-3.1-8b-instant',
       messages: [
         {
@@ -75,9 +77,9 @@ Requirements: ${(job.requirements || []).join(' | ')}`;
 
     const text = completion.choices?.[0]?.message?.content || null;
 
-    res.status(200).json({ summary: text });
+    return NextResponse.json({ summary: text }, { status: 200 });
   } catch (e) {
     console.error('[summarize-job] AI error', e);
-    res.status(200).json({ summary: null });
+    return NextResponse.json({ summary: null }, { status: 200 });
   }
 }

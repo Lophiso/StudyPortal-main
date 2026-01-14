@@ -3,8 +3,8 @@ import type { Database } from '../../src/lib/database.types';
 import Parser from 'rss-parser';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+const supabaseUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) as string;
+const supabaseAnonKey = (process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) as string;
 const geminiApiKey = process.env.GEMINI_API_KEY as string;
 
 const resolvedUrl = supabaseUrl || 'http://localhost:54321';
@@ -62,7 +62,8 @@ interface GeminiEnriched {
   summaryEn: string | null;
 }
 
-export async function runRealtimeIngestion() {
+export async function runRealtimeIngestion(options?: { includeIndustry?: boolean }) {
+  const includeIndustry = options?.includeIndustry !== false;
   const feedItems: FeedItem[] = [];
 
   const selectedFeeds: { url: string; inferredType: EngineJobType }[] = [];
@@ -76,8 +77,10 @@ export async function runRealtimeIngestion() {
   for (const url of REGIONAL_FEEDS) {
     selectedFeeds.push({ url, inferredType: 'PHD' });
   }
-  for (const url of INDUSTRY_FEEDS) {
-    selectedFeeds.push({ url, inferredType: 'JOB' });
+  if (includeIndustry) {
+    for (const url of INDUSTRY_FEEDS) {
+      selectedFeeds.push({ url, inferredType: 'JOB' });
+    }
   }
 
   console.log('[realtimeFetcher] selected feeds:', selectedFeeds.map((f) => f.url));
@@ -267,6 +270,11 @@ Description: ${item.description}`;
         : ['See full description for details.'];
 
       const type: EngineJobType = enriched.isPhD ? 'PHD' : item.inferredType;
+
+      if (!includeIndustry && type !== 'PHD') {
+        skipped.push({ link: item.link, reason: 'filtered_non_phd' });
+        return;
+      }
       const deadline = enriched.deadline ?? null;
       const postedAtIso = item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString();
 
