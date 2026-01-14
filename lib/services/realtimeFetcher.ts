@@ -3,15 +3,14 @@ import type { Database } from '../../src/lib/database.types';
 import Parser from 'rss-parser';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY as string;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 const geminiApiKey = process.env.GEMINI_API_KEY as string;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Supabase env vars VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set');
-}
+const resolvedUrl = supabaseUrl || 'http://localhost:54321';
+const resolvedAnonKey = supabaseAnonKey || 'public-anon-key-not-configured';
 
-const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+const supabase = createClient<Database>(resolvedUrl, resolvedAnonKey);
 
 const rssParser = new Parser({
   // Make xml2js more forgiving so that bad entities like unescaped '&' don't
