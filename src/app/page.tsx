@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import NavbarNext from '../components/NavbarNext';
 
 type HomeContext =
@@ -97,20 +96,16 @@ export default function HomePage() {
 
   useEffect(() => {
     const fetchTrending = async () => {
-      const { data, error: supabaseError } = await supabase
-        .from('JobOpportunity')
-        .select('title')
-        .or('type.eq.PHD,isPhd.eq.true')
-        .order('postedAt', { ascending: false })
-        .limit(200);
-
-      if (supabaseError) {
-        console.warn('Failed to load trending PhD terms', supabaseError);
+      try {
+        const res = await fetch('/api/phd?limit=200&select=title');
+        if (!res.ok) return;
+        const body = (await res.json()) as { data?: Array<{ title?: string | null }>; error?: string };
+        if (body.error) return;
+        const titles = (body.data ?? []).map((r) => (r?.title ?? '').toString()).filter(Boolean);
+        setTrendingTerms(extractTrendingTerms(titles, 8));
+      } catch {
         return;
       }
-
-      const titles = (data ?? []).map((r: any) => (r?.title ?? '').toString()).filter(Boolean);
-      setTrendingTerms(extractTrendingTerms(titles, 8));
     };
 
     void fetchTrending();

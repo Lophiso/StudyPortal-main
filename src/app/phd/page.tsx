@@ -8,7 +8,6 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import NavbarNext from '../../components/NavbarNext';
-import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import type { JobOpportunity } from '../../lib/database.types';
 
 function isTba(value?: string | null) {
@@ -201,26 +200,22 @@ function PhdPageInner() {
 
   useEffect(() => {
     async function loadJobs() {
-      if (!isSupabaseConfigured) {
-        setError('Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
-        setLoading(false);
-        return;
-      }
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
-        .from('JobOpportunity')
-        .select('*')
-        .or('type.eq.PHD,isPhd.eq.true')
-        .order('postedAt', { ascending: false })
-        .limit(500);
-
-      if (error) {
-        console.error('Failed to load PhD positions', error);
+      try {
+        const res = await fetch('/api/phd?limit=500');
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const body = (await res.json()) as { data?: JobOpportunity[]; error?: string };
+        if (body.error) {
+          throw new Error(body.error);
+        }
+        setJobs(body.data ?? []);
+      } catch (e) {
+        console.error('Failed to load PhD positions', e);
         setError('Failed to load PhD positions. Please try again later.');
-      } else {
-        setJobs((data as JobOpportunity[]) || []);
       }
 
       setLoading(false);

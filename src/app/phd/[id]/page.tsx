@@ -7,7 +7,6 @@ import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import NavbarNext from '../../../components/NavbarNext';
-import { supabase } from '../../../lib/supabase';
 import type { JobOpportunity } from '../../../lib/database.types';
 
 function getSourceDomain(source?: string | null) {
@@ -187,13 +186,23 @@ export default function PhdDetailPage() {
     async function loadJob() {
       setLoading(true);
       setError(null);
-      const { data, error } = await supabase.from('JobOpportunity').select('*').eq('id', jobId).single();
 
-      if (error) {
-        console.error('Failed to load PhD opportunity', error);
+      try {
+        const res = await fetch(`/api/phd?id=${encodeURIComponent(jobId)}`);
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const body = (await res.json()) as { data?: JobOpportunity; error?: string };
+        if (body.error) {
+          throw new Error(body.error);
+        }
+        if (!body.data) {
+          throw new Error('Not found');
+        }
+        setJob(body.data);
+      } catch (e) {
+        console.error('Failed to load PhD opportunity', e);
         setError('Could not load this PhD opportunity. Please try again later.');
-      } else {
-        setJob(data as JobOpportunity);
       }
 
       setLoading(false);
