@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, BookOpen, Briefcase, Scale, FlaskConical, GraduationCap, Globe, Heart } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import type { Program } from '../lib/database.types';
 import NavbarNext from '../components/NavbarNext';
-import { useAuth } from '../lib/auth';
 
 type HomeContext =
   | { kind: 'canada_phd'; ts: number }
@@ -85,45 +83,11 @@ function extractTrendingTerms(titles: string[], max: number) {
 
 export default function HomePage() {
   const router = useRouter();
-  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
-  const [programs, setPrograms] = useState<Program[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [bookmarkedProgramIds, setBookmarkedProgramIds] = useState<number[]>([]);
-  const [bookmarkBusyId, setBookmarkBusyId] = useState<number | null>(null);
   const [homeContext, setHomeContext] = useState<HomeContext | null>(null);
   const [trendingTerms, setTrendingTerms] = useState<string[]>([]);
-
-  useEffect(() => {
-    const fetchPrograms = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const { data, error: supabaseError } = await supabase
-          .from('programs')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(12);
-
-        if (supabaseError) {
-          throw supabaseError;
-        }
-
-        setPrograms((data ?? []) as Program[]);
-      } catch (err) {
-        console.error('Error fetching programs:', err);
-        setError('Failed to load programs. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void fetchPrograms();
-  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -164,30 +128,6 @@ export default function HomePage() {
     return "Search programs, PhD positions, and jobs — with clean summaries and smart filters.";
   })();
 
-  useEffect(() => {
-    const fetchBookmarks = async () => {
-      if (!user) {
-        setBookmarkedProgramIds([]);
-        return;
-      }
-
-      const { data, error: bookmarksError } = await supabase
-        .from('bookmarks')
-        .select('program_id')
-        .eq('user_id', user.id);
-
-      if (bookmarksError) {
-        console.error('Error fetching bookmarks:', bookmarksError);
-        return;
-      }
-
-      const rows = (data ?? []) as Array<{ program_id: number }>;
-      setBookmarkedProgramIds(rows.map((b) => b.program_id));
-    };
-
-    void fetchBookmarks();
-  }, [user]);
-
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -196,53 +136,6 @@ export default function HomePage() {
     if (selectedCountry) params.set('country', selectedCountry);
     if (selectedLevel) params.set('level', selectedLevel);
     router.push(`/search?${params.toString()}`);
-  };
-
-  const disciplines = [
-    { name: 'Engineering', icon: FlaskConical, color: 'bg-blue-500' },
-    { name: 'Business', icon: Briefcase, color: 'bg-green-500' },
-    { name: 'Law', icon: Scale, color: 'bg-purple-500' },
-    { name: 'Sciences', icon: BookOpen, color: 'bg-red-500' },
-    { name: 'Arts & Humanities', icon: Globe, color: 'bg-yellow-500' },
-    { name: 'Medicine', icon: GraduationCap, color: 'bg-pink-500' },
-  ];
-
-  const toggleBookmark = async (programId: number) => {
-    if (!user) {
-      router.push('/auth');
-      return;
-    }
-
-    setBookmarkBusyId(programId);
-
-    const isBookmarked = bookmarkedProgramIds.includes(programId);
-
-    try {
-      if (isBookmarked) {
-        const { error: deleteError } = await supabase
-          .from('bookmarks')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('program_id', programId);
-
-        if (deleteError) throw deleteError;
-
-        setBookmarkedProgramIds((prev) => prev.filter((id) => id !== programId));
-      } else {
-        const { error: insertError } = await supabase.from('bookmarks').insert({
-          user_id: user.id,
-          program_id: programId,
-        });
-
-        if (insertError) throw insertError;
-
-        setBookmarkedProgramIds((prev) => [...prev, programId]);
-      }
-    } catch (bookmarkError) {
-      console.error('Error updating bookmark:', bookmarkError);
-    } finally {
-      setBookmarkBusyId(null);
-    }
   };
 
   return (
@@ -336,103 +229,6 @@ export default function HomePage() {
               Search Programs
             </button>
           </form>
-        </div>
-      </div>
-
-      <div className="bg-[#F5F7FA] py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-[#002147] text-center mb-12">
-            Browse by Discipline
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {disciplines.map((discipline) => (
-              <div
-                key={discipline.name}
-                className="bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-200 p-6 cursor-pointer group"
-                onClick={() => router.push(`/search?q=${encodeURIComponent(discipline.name)}`)}
-              >
-                <div className={`${discipline.color} w-12 h-12 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200`}>
-                  <discipline.icon className="h-6 w-6 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold text-[#002147] mb-2">{discipline.name}</h3>
-                <p className="text-gray-600">Explore programs in {discipline.name}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl font-bold text-[#002147]">Latest Programs</h2>
-            <button
-              type="button"
-              onClick={() => router.push('/search')}
-              className="text-[#002147] hover:text-[#FF9900] font-semibold"
-            >
-              View All →
-            </button>
-          </div>
-
-          {loading && <p className="text-gray-600 text-sm">Loading programs…</p>}
-          {error && !loading && <p className="text-sm text-red-600 mb-4">{error}</p>}
-
-          {!loading && !error && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {programs.map((program) => {
-                const isBookmarked = bookmarkedProgramIds.includes(program.id);
-                const busy = bookmarkBusyId === program.id;
-
-                return (
-                  <div
-                    key={program.id}
-                    className="bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-200 overflow-hidden"
-                  >
-                    <div className="p-6">
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h3 className="text-xl font-semibold text-[#002147] mb-1 line-clamp-2">
-                            {program.title}
-                          </h3>
-                          <p className="text-gray-600 text-sm">{program.university}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => void toggleBookmark(program.id)}
-                          disabled={busy}
-                          className="shrink-0 p-2 rounded-lg hover:bg-gray-100 disabled:opacity-60"
-                          aria-label={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
-                        >
-                          <Heart
-                            className={`h-5 w-5 ${
-                              isBookmarked ? 'fill-[#FF9900] text-[#FF9900]' : 'text-gray-400'
-                            }`}
-                          />
-                        </button>
-                      </div>
-
-                      <p className="text-gray-700 text-sm mb-4 line-clamp-2">
-                        {program.description}
-                      </p>
-
-                      <div className="text-xs text-gray-600 mb-4">
-                        {program.country} · {program.study_level}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/program/${program.id}`)}
-                        className="w-full bg-[#002147] hover:bg-[#001a35] text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200"
-                      >
-                        View Details
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
       </div>
     </div>
