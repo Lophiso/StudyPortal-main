@@ -132,7 +132,9 @@ export default function JobDetailPage() {
                     </div>
                   )}
                   {!summary.loading && !summary.text && !summary.error && (
-                    <p className="text-xs text-gray-700 whitespace-pre-line">{job.description}</p>
+                    <div className="prose prose-slate max-w-none text-xs">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.description}</ReactMarkdown>
+                    </div>
                   )}
                 </section>
 

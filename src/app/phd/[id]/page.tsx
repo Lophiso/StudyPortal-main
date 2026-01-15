@@ -8,6 +8,20 @@ import NavbarNext from '../../../components/NavbarNext';
 import { supabase } from '../../../lib/supabase';
 import type { JobOpportunity } from '../../../lib/database.types';
 
+function getSourceDomain(source?: string | null) {
+  if (!source) return null;
+  try {
+    return new URL(source).hostname.replace(/^www\./, '');
+  } catch {
+    return source;
+  }
+}
+
+function isTba(value?: string | null) {
+  const v = (value ?? '').toString().trim();
+  return !v || v.toLowerCase() === 'tba' || v.toLowerCase() === 'unknown';
+}
+
 interface SummaryState {
   loading: boolean;
   error: string | null;
@@ -92,14 +106,26 @@ export default function PhdDetailPage() {
         {!loading && !error && job && (
           <article className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <header className="mb-4">
-              <h1 className="text-2xl font-semibold text-[#002147] mb-1">{job.full_title || job.title}</h1>
-              <p className="text-sm text-gray-700 mb-1">{job.company}</p>
-              <p className="text-xs text-gray-500 mb-1">{[job.city, job.country].filter(Boolean).join(', ')}</p>
+              <h1 className="text-2xl font-semibold text-[#002147] mb-1">
+                {!isTba(job.full_title) ? job.full_title : !isTba(job.title) ? job.title : 'PhD Opportunity'}
+              </h1>
+
+              {(() => {
+                const institution = !isTba(job.company) ? job.company : getSourceDomain(job.applicationLink);
+                return institution ? <p className="text-sm text-gray-700 mb-1">{institution}</p> : null;
+              })()}
+
+              {(() => {
+                const parts = [job.city, job.country].filter((v) => !isTba(v));
+                return parts.length > 0 ? (
+                  <p className="text-xs text-gray-500 mb-1">{parts.join(', ')}</p>
+                ) : null;
+              })()}
               <div className="text-xs text-gray-600 space-y-1 mt-2">
                 <p>
                   <span className="font-medium">Type:</span> PhD / Doctoral position
                 </p>
-                {job.deadline && (
+                {job.deadline && !isTba(job.deadline) && (
                   <p>
                     <span className="font-medium">Deadline:</span> {new Date(job.deadline).toLocaleDateString()}
                   </p>
@@ -119,6 +145,11 @@ export default function PhdDetailPage() {
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary.text}</ReactMarkdown>
                 </div>
               )}
+              {!summary.loading && !summary.text && !summary.error && (
+                <div className="prose prose-slate max-w-none text-xs">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.description}</ReactMarkdown>
+                </div>
+              )}
             </section>
 
             <section className="mb-4">
@@ -131,11 +162,9 @@ export default function PhdDetailPage() {
             {job.requirements && job.requirements.length > 0 && (
               <section className="mb-4">
                 <h2 className="text-sm font-semibold text-[#002147] mb-1">Key requirements</h2>
-                <ul className="list-disc list-inside text-xs text-gray-700 space-y-0.5">
-                  {job.requirements.map((req, idx) => (
-                    <li key={idx}>{req}</li>
-                  ))}
-                </ul>
+                <div className="prose prose-slate max-w-none text-xs">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.requirements.map((r) => `- ${r}`).join('\n')}</ReactMarkdown>
+                </div>
               </section>
             )}
 

@@ -9,6 +9,20 @@ import NavbarNext from '../../components/NavbarNext';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import type { JobOpportunity } from '../../lib/database.types';
 
+function isTba(value?: string | null) {
+  const v = (value ?? '').toString().trim();
+  return !v || v.toLowerCase() === 'tba' || v.toLowerCase() === 'unknown';
+}
+
+function getDomain(url?: string | null) {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 export default function PhdPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#F5F7FA]" />}>
@@ -426,9 +440,14 @@ function PhdResults({
                   </h3>
 
                   <p className="text-sm font-semibold text-red-600 mb-3">
-                    {(job.company || 'TBA').toString()}
-                    {' > '}
-                    {(job.department || 'TBA').toString()}
+                    {(() => {
+                      const institution = !isTba(job.company) ? job.company : getDomain(job.applicationLink);
+                      const dept = !isTba(job.department) ? job.department : null;
+                      if (institution && dept) return `${institution} > ${dept}`;
+                      if (institution) return institution;
+                      if (dept) return dept;
+                      return null;
+                    })()}
                   </p>
 
                   <div
@@ -450,9 +469,11 @@ function PhdResults({
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border">
                       🎓 PhD
                     </span>
-                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border">
-                      💰 {(job.funding_status || 'TBA').toString()}
-                    </span>
+                    {!isTba(job.funding_status) && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border">
+                        💰 {job.funding_status}
+                      </span>
+                    )}
                   </div>
 
                   <button

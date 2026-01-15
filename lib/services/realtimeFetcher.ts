@@ -115,12 +115,24 @@ function clampWords(text: string, maxWords: number) {
 function sanitizeCardSummary(raw: string) {
   const cleaned = raw
     .replace(/\s+/g, ' ')
+    .replace(/[`*_#>\[\]]/g, '')
     .replace(/\b(apply here|apply now|click here|read more|learn more|visit)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 
   if (!cleaned) return 'TBA';
   return clampWords(cleaned, 15);
+}
+
+function isRubbishTitle(title: string) {
+  const t = (title || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!t) return true;
+  return (
+    t.startsWith('find your ideal') ||
+    t.startsWith('find your next') ||
+    t.includes('job search') ||
+    t.includes('search results')
+  );
 }
 
 function inferUniversityFromUrl(url: string) {
@@ -317,6 +329,16 @@ function htmlToMarkdown(html: string, baseUrl: string) {
   return md;
 }
 
+function extractPrimaryHeading(html: string) {
+  const $ = cheerio.load(html);
+  const pick = (sel: string) => $(sel).first().text().replace(/\s+/g, ' ').trim();
+  const h1 = pick('main h1, article h1, body h1');
+  if (h1) return h1;
+  const h2 = pick('main h2, article h2, body h2');
+  if (h2) return h2;
+  return null;
+}
+
 async function fetchMarkdownForUrl(url: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
@@ -341,15 +363,17 @@ async function fetchMarkdownForUrl(url: string) {
 
   const html = await res.text();
   if (isBlockedContent(html)) {
-    return { markdown: null as string | null, blocked: true };
+    return { markdown: null as string | null, blocked: true, pageTitle: null as string | null };
   }
+
+  const pageTitle = extractPrimaryHeading(html);
 
   const markdown = htmlToMarkdown(html, url);
   if (isBlockedContent(markdown)) {
-    return { markdown: null as string | null, blocked: true };
+    return { markdown: null as string | null, blocked: true, pageTitle: null as string | null };
   }
 
-  return { markdown, blocked: false };
+  return { markdown, blocked: false, pageTitle };
 }
 
 export async function runRealtimeIngestion(options?: { includeIndustry?: boolean }) {
@@ -552,8 +576,11 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
       let enriched: GeminiEnriched | null = null;
 
       let contentMarkdown = item.description;
+      let pageTitle: string | null = null;
       try {
-        const { markdown, blocked } = await fetchMarkdownForUrl(item.link);
+        const fetched = await fetchMarkdownForUrl(item.link);
+        const { markdown, blocked } = fetched;
+        pageTitle = fetched.pageTitle;
         if (blocked) {
           skipped.push({ link: item.link, reason: 'blocked_content' });
           return;
@@ -563,6 +590,12 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
         }
       } catch (e: any) {
         console.warn('[realtimeFetcher] page fetch/markdown failed for', item.link, e?.message ?? String(e));
+      }
+
+      const sourceTitle = (pageTitle ?? item.title ?? '').toString().replace(/\s+/g, ' ').trim();
+      if (isRubbishTitle(sourceTitle)) {
+        skipped.push({ link: item.link, reason: 'rubbish_source_title' });
+        return;
       }
 
       if (isBlockedContent(contentMarkdown)) {
@@ -581,7 +614,9 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
 Analyze the following text and:
 0) Rewrite the job title to be human-friendly, professional, and under 60 characters.
    Example: "PhD in Quantum Computing - MIT".
-   - Preserve the original (full) title separately as full_title.
+   - The title field MUST contain the human-friendly rewrite.
+   - NEVER use generic site-crawler/SEO text like "Find your ideal position" as the title.
+   - Preserve the original (page heading) separately as full_title.
 1) Detect the main language (ISO 639-1 code if possible).
 2) Provide a concise English Markdown summary (3-5 sentences + 3-5 bullet points).
 3) Produce a card_summary: a 15-word hook describing the research goal (no generic "Apply" text).
@@ -607,9 +642,10 @@ Important rules:
 - If university is missing, infer it from:
   - the source domain in the URL
   - or an email address domain in the footer/contact section.
+- Ignore the HTML <title> tag and SEO headers. Use the primary page heading (H1/H2) as the source for full_title.
 
 Text:
-Source title: ${item.title}
+Source title (page heading): ${sourceTitle}
 Content (Markdown):
 ${contentMarkdown}`;
 
@@ -666,8 +702,18 @@ ${contentMarkdown}`;
 
       const city = enriched.city || '';
       const country = enriched.country || '';
-      const fullTitle = (enriched.full_title ?? item.title ?? '').toString().trim() || 'TBA';
+      const fullTitle = (pageTitle ?? enriched.full_title ?? sourceTitle).toString().trim() || 'TBA';
+
+      if (enriched.title && isRubbishTitle(enriched.title)) {
+        skipped.push({ link: item.link, reason: 'rubbish_ai_title' });
+        return;
+      }
+
       const cleanedTitle = enriched.title ? truncateTitle(enriched.title) : truncateTitle(fullTitle);
+      if (isRubbishTitle(cleanedTitle)) {
+        skipped.push({ link: item.link, reason: 'rubbish_title' });
+        return;
+      }
       const department = (enriched.department ?? '').toString().trim() || 'TBA';
       const fundingStatus = (enriched.funding_status ?? '').toString().trim() || 'TBA';
 

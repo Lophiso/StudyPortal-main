@@ -49,11 +49,13 @@ export async function GET(request: Request) {
     const prompt = `You are helping summarize a ${kindLabel} for a student-facing portal.
 Return the answer strictly in Markdown.
 
+Do NOT include a title heading or restate the job title as a header. Start immediately with the paragraph.
+
 Write:
 1) A short paragraph (3-5 sentences) covering: focus, institution/employer, location, and key requirements.
 2) Then a Markdown bullet list with 3-5 bullets of the most important details.
 
-Title: ${job.title}
+Title: ${job.full_title || job.title}
 Company/Institution: ${job.company}
 Location: ${job.city}, ${job.country}
 Description: ${job.description}
