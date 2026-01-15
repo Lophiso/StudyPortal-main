@@ -26,5 +26,10 @@ jobs:
           fi
 
           echo "Calling $APP_BASE_URL/api/cron/canada-verify"
-          curl -fsSL -X POST "$APP_BASE_URL/api/cron/canada-verify" \
-            -H "x-cron-secret: $CRON_SECRET"
+          status=$(curl -sS -o resp.json -w "%{http_code}" -X POST "$APP_BASE_URL/api/cron/canada-verify" \
+            -H "x-cron-secret: $CRON_SECRET")
+          cat resp.json || true
+          echo "http_status=$status"
+          if [ "$status" -ge 400 ]; then
+            exit 1
+          fi
