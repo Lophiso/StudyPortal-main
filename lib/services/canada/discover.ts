@@ -146,6 +146,81 @@ async function fetchAndUpsertOne(args: {
   };
 }
 
+async function upsertFromHtml(args: {
+  programType: CanadaProgramType;
+  source: CanadaSourceRow;
+  url: string;
+  html: string;
+  etag: string | null;
+  lastModified: string | null;
+}) {
+  const supabase = canadaSupabase();
+
+  const built = buildOpportunityFromHtml({
+    programType: args.programType,
+    canonicalUrl: args.url,
+    sourceUrl: args.source.base_url,
+    html: args.html,
+    etag: args.etag,
+    lastModified: args.lastModified,
+  });
+
+  const decision = safetyGate({
+    blocked: false,
+    loginWall: false,
+    applicationUrl: built.appUrl,
+    deadlineDate: built.deadline.date,
+    deadlineConfidence: built.deadline.confidence,
+  });
+
+  const payload = {
+    program_type: args.programType,
+    country: 'Canada',
+    province: null,
+    city: null,
+    institution_name: built.institution,
+    department: null,
+    lab_group: null,
+    title_clean: built.titleClean,
+    nutshell_15_words: built.nutshell,
+    funding_type: built.funding.type,
+    funding_confidence: built.funding.confidence,
+    funding_evidence: built.funding.evidence,
+    international_allowed: built.intl.allowed,
+    eligibility_confidence: built.intl.confidence,
+    eligibility_notes: null,
+    eligibility_evidence: built.intl.evidence,
+    start_term: built.startTerm,
+    deadline_date: built.deadline.date,
+    deadline_confidence: built.deadline.confidence,
+    deadline_evidence: built.deadline.evidence,
+    application_url: built.appUrl ?? args.url,
+    source_url: args.source.base_url,
+    canonical_url: args.url,
+    last_verified_at: new Date().toISOString(),
+    freshness_score: 80,
+    status: decision.status,
+    status_reason: decision.reason,
+    content_hash: built.contentHash,
+    page_last_modified: built.pageLastModified,
+    etag: built.etag,
+  };
+
+  const { error: upsertError } = await supabase
+    .from('canada_opportunity')
+    .upsert(payload, { onConflict: 'canonical_url,program_type' });
+
+  if (upsertError) {
+    throw new Error(upsertError.message);
+  }
+
+  return {
+    accepted: decision.status === 'ACTIVE' || decision.status === 'NEEDS_REVIEW' ? 1 : 0,
+    blocked: decision.status === 'BLOCKED' ? 1 : 0,
+    expired: decision.status === 'EXPIRED' ? 1 : 0,
+  };
+}
+
 export async function runCanadaDiscover(programType?: CanadaProgramType) {
   const supabase = canadaSupabase();
   const http = new CanadaHttpClient();
@@ -195,6 +270,18 @@ export async function runCanadaDiscover(programType?: CanadaProgramType) {
     if (fetched.status !== 'OK' || !fetched.bodyText) {
       continue;
     }
+
+    const baseStats = await upsertFromHtml({
+      programType: source.program_type,
+      source,
+      url: source.base_url,
+      html: fetched.bodyText,
+      etag: fetched.etag,
+      lastModified: fetched.lastModified,
+    });
+    summary.accepted += baseStats.accepted;
+    summary.blocked += baseStats.blocked;
+    summary.expired += baseStats.expired;
 
     const links = extractLinks(fetched.bodyText, source.base_url)
       .filter((u) => sameHost(u, source.base_url))
