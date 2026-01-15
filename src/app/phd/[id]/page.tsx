@@ -22,6 +22,47 @@ function isTba(value?: string | null) {
   return !v || v.toLowerCase() === 'tba' || v.toLowerCase() === 'unknown';
 }
 
+function isRubbishTitle(title?: string | null) {
+  const t = (title ?? '').toString().toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!t) return true;
+  return (
+    t.startsWith('find your ideal') ||
+    t.startsWith('find your next') ||
+    t.startsWith('sign up for instagram') ||
+    t.startsWith('log in') ||
+    (t.includes('sign up') && t.includes('instagram')) ||
+    t.includes('join instagram') ||
+    t.includes('facebook.com') ||
+    t.includes('instagram.com') ||
+    t.includes('twitter.com') ||
+    t.includes('x.com')
+  );
+}
+
+function stripRedundantTitleFromSummary(summaryText: string, jobTitle: string, fullTitle: string) {
+  const lines = summaryText.split(/\r?\n/);
+  while (lines.length > 0 && lines[0].trim() === '') lines.shift();
+
+  const first = (lines[0] ?? '').trim();
+  const normalizedFirst = first
+    .replace(/^#+\s*/, '')
+    .replace(/^\*\*(.+)\*\*$/, '$1')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+
+  const candidates = [jobTitle, fullTitle]
+    .map((t) => (t ?? '').toString().trim())
+    .filter(Boolean)
+    .map((t) => t.replace(/\s+/g, ' ').toLowerCase());
+
+  if (candidates.some((c) => normalizedFirst === c)) {
+    lines.shift();
+    while (lines.length > 0 && lines[0].trim() === '') lines.shift();
+  }
+
+  return lines.join('\n').trim();
+}
+
 interface SummaryState {
   loading: boolean;
   error: string | null;
@@ -107,7 +148,11 @@ export default function PhdDetailPage() {
           <article className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <header className="mb-4">
               <h1 className="text-2xl font-semibold text-[#002147] mb-1">
-                {!isTba(job.full_title) ? job.full_title : !isTba(job.title) ? job.title : 'PhD Opportunity'}
+                {!isTba(job.title) && !isRubbishTitle(job.title)
+                  ? job.title
+                  : !isTba(job.full_title) && !isRubbishTitle(job.full_title)
+                    ? job.full_title
+                    : 'PhD Opportunity'}
               </h1>
 
               {(() => {
@@ -142,7 +187,13 @@ export default function PhdDetailPage() {
               {!summary.loading && summary.error && <p className="text-xs text-gray-600">{summary.error}</p>}
               {!summary.loading && summary.text && (
                 <div className="prose prose-slate max-w-none text-xs">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary.text}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {stripRedundantTitleFromSummary(
+                      summary.text,
+                      (job.title ?? '').toString(),
+                      (job.full_title ?? '').toString(),
+                    )}
+                  </ReactMarkdown>
                 </div>
               )}
               {!summary.loading && !summary.text && !summary.error && (

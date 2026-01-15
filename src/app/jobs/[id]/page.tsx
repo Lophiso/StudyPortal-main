@@ -15,6 +15,30 @@ interface SummaryState {
   text: string | null;
 }
 
+function stripRedundantTitleFromSummary(summaryText: string, jobTitle: string, fullTitle: string) {
+  const lines = summaryText.split(/\r?\n/);
+  while (lines.length > 0 && lines[0].trim() === '') lines.shift();
+
+  const first = (lines[0] ?? '').trim();
+  const normalizedFirst = first
+    .replace(/^#+\s*/, '')
+    .replace(/^\*\*(.+)\*\*$/, '$1')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+
+  const candidates = [jobTitle, fullTitle]
+    .map((t) => (t ?? '').toString().trim())
+    .filter(Boolean)
+    .map((t) => t.replace(/\s+/g, ' ').toLowerCase());
+
+  if (candidates.some((c) => normalizedFirst === c)) {
+    lines.shift();
+    while (lines.length > 0 && lines[0].trim() === '') lines.shift();
+  }
+
+  return lines.join('\n').trim();
+}
+
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -128,7 +152,9 @@ export default function JobDetailPage() {
                   {!summary.loading && summary.error && <p className="text-xs text-gray-600">{summary.error}</p>}
                   {!summary.loading && summary.text && (
                     <div className="prose prose-slate max-w-none text-xs">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary.text}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {stripRedundantTitleFromSummary(summary.text, job.title ?? '', job.full_title ?? '')}
+                      </ReactMarkdown>
                     </div>
                   )}
                   {!summary.loading && !summary.text && !summary.error && (

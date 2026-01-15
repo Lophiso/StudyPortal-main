@@ -130,9 +130,38 @@ function isRubbishTitle(title: string) {
   return (
     t.startsWith('find your ideal') ||
     t.startsWith('find your next') ||
+    t.startsWith('sign up for instagram') ||
+    t.startsWith('log in') ||
+    t.includes('sign up') && t.includes('instagram') ||
+    t.includes('join instagram') ||
+    t.includes('follow') && t.includes('instagram') ||
+    t.includes('close') && t.includes('instagram') ||
+    t.includes('instagram.com') ||
+    t.includes('facebook.com') ||
+    t.includes('twitter.com') ||
+    t.includes('x.com') ||
     t.includes('job search') ||
     t.includes('search results')
   );
+}
+
+function isBlacklistedHost(url: string) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+    return (
+      host === 'instagram.com' ||
+      host.endsWith('.instagram.com') ||
+      host === 'facebook.com' ||
+      host.endsWith('.facebook.com') ||
+      host === 'm.facebook.com' ||
+      host === 'twitter.com' ||
+      host.endsWith('.twitter.com') ||
+      host === 'x.com' ||
+      host.endsWith('.x.com')
+    );
+  } catch {
+    return false;
+  }
 }
 
 function inferUniversityFromUrl(url: string) {
@@ -577,6 +606,11 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
 
       let contentMarkdown = item.description;
       let pageTitle: string | null = null;
+
+      if (isBlacklistedHost(item.link)) {
+        skipped.push({ link: item.link, reason: 'blacklisted_host' });
+        return;
+      }
       try {
         const fetched = await fetchMarkdownForUrl(item.link);
         const { markdown, blocked } = fetched;

@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -21,6 +22,40 @@ function getDomain(url?: string | null) {
   } catch {
     return url;
   }
+}
+
+function isRubbishTitle(title?: string | null) {
+  const t = (title ?? '').toString().toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!t) return true;
+  return (
+    t.startsWith('find your ideal') ||
+    t.startsWith('find your next') ||
+    t.startsWith('sign up for instagram') ||
+    t.startsWith('log in') ||
+    (t.includes('sign up') && t.includes('instagram')) ||
+    t.includes('join instagram') ||
+    t.includes('facebook.com') ||
+    t.includes('instagram.com') ||
+    t.includes('twitter.com') ||
+    t.includes('x.com')
+  );
+}
+
+function isBlacklistedHost(url?: string | null) {
+  if (!url) return false;
+  const host = getDomain(url)?.toLowerCase();
+  if (!host) return false;
+  return (
+    host === 'instagram.com' ||
+    host.endsWith('.instagram.com') ||
+    host === 'facebook.com' ||
+    host.endsWith('.facebook.com') ||
+    host === 'm.facebook.com' ||
+    host === 'twitter.com' ||
+    host.endsWith('.twitter.com') ||
+    host === 'x.com' ||
+    host.endsWith('.x.com')
+  );
 }
 
 export default function PhdPage() {
@@ -306,6 +341,9 @@ function PhdResults({
   const filtered = (() => {
     let list = [...jobs];
 
+    // Hide obviously bad historic records (SEO / social pages) so titles align in the UI.
+    list = list.filter((job) => !isBlacklistedHost(job.applicationLink) && !isRubbishTitle(job.title));
+
     const normalizedQuery = query.trim().toLowerCase();
     if (normalizedQuery) {
       list = list.filter((job) => {
@@ -436,19 +474,23 @@ function PhdResults({
               >
                 <div className="p-5">
                   <h3 className="text-lg md:text-xl font-semibold text-[#002147] leading-snug mb-1">
-                    {job.title}
+                    <Link href={`/phd/${job.id}`} className="hover:underline">
+                      {job.title}
+                    </Link>
                   </h3>
 
-                  <p className="text-sm font-semibold text-red-600 mb-3">
-                    {(() => {
-                      const institution = !isTba(job.company) ? job.company : getDomain(job.applicationLink);
-                      const dept = !isTba(job.department) ? job.department : null;
+                  {(() => {
+                    const institution = !isTba(job.company) ? job.company : getDomain(job.applicationLink);
+                    const dept = !isTba(job.department) ? job.department : null;
+                    const label = (() => {
                       if (institution && dept) return `${institution} > ${dept}`;
                       if (institution) return institution;
                       if (dept) return dept;
                       return null;
-                    })()}
-                  </p>
+                    })();
+
+                    return label ? <p className="text-sm font-semibold text-red-600 mb-3">{label}</p> : null;
+                  })()}
 
                   <div
                     className="text-sm text-gray-700 overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]"
