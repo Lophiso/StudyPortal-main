@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Filter, Search, X } from 'lucide-react';
@@ -164,6 +164,7 @@ function PhdPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const reduceMotion = useReducedMotion();
+  const filterCloseRef = useRef<HTMLButtonElement | null>(null);
 
   const [jobs, setJobs] = useState<JobOpportunity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -216,6 +217,26 @@ function PhdPageInner() {
   useEffect(() => {
     recordHomeContext('phd');
   }, []);
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    filterCloseRef.current?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setFilterOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [filterOpen]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -334,7 +355,7 @@ function PhdPageInner() {
             <button
               type="button"
               onClick={() => setFilterOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-white/70 dark:bg-white/10 border border-white/20 px-4 py-2 text-sm font-semibold text-[#002147] dark:text-white hover:bg-white/80 dark:hover:bg-white/15 transition-colors"
+              className="inline-flex items-center gap-2 rounded-xl bg-white/70 dark:bg-white/10 border border-white/20 px-4 py-2 text-sm font-semibold text-[#002147] dark:text-white hover:bg-white/80 dark:hover:bg-white/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9900]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
             >
               <Filter className="h-4 w-4" />
               Filters
@@ -498,7 +519,7 @@ function PhdPageInner() {
 
                   <Link
                     href={`/phd/${job.id}`}
-                    className="inline-flex items-center justify-center rounded-xl bg-[#FF5A1F] hover:bg-[#e14b1c] text-white text-xs font-semibold px-4 py-2 transition-colors"
+                    className="inline-flex items-center justify-center rounded-xl bg-[#FF5A1F] hover:bg-[#e14b1c] text-white text-xs font-semibold px-4 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9900]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
                     onClick={() => recordHomeContext('phd')}
                   >
                     More details
@@ -525,6 +546,9 @@ function PhdPageInner() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 24, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Filters"
               className="absolute right-4 top-4 bottom-4 w-[min(520px,calc(100vw-2rem))] rounded-2xl border border-white/20 bg-white/80 dark:bg-[#0B1220]/90 backdrop-blur-xl shadow-2xl overflow-hidden"
             >
               <div className="flex items-center justify-between px-5 py-4 border-b border-white/20">
@@ -535,7 +559,8 @@ function PhdPageInner() {
                 <button
                   type="button"
                   onClick={() => setFilterOpen(false)}
-                  className="h-9 w-9 inline-flex items-center justify-center rounded-xl bg-white/60 dark:bg-white/10 border border-white/20"
+                  ref={filterCloseRef}
+                  className="h-9 w-9 inline-flex items-center justify-center rounded-xl bg-white/60 dark:bg-white/10 border border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9900]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
                 >
                   <X className="h-4 w-4 text-slate-700 dark:text-slate-200" />
                 </button>
@@ -549,7 +574,7 @@ function PhdPageInner() {
                   <button
                     type="button"
                     onClick={() => setFilterGroups((prev) => [...prev, createEmptyGroup()])}
-                    className="text-xs font-semibold text-[#FF5A1F] hover:underline"
+                    className="text-xs font-semibold text-[#FF5A1F] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9900]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded"
                   >
                     + Add OR group
                   </button>
@@ -567,7 +592,7 @@ function PhdPageInner() {
                               setFilterGroups((prev) => prev.filter((g) => g.id !== group.id));
                               router.push('/phd?page=1');
                             }}
-                            className="text-xs text-slate-600 dark:text-slate-300 hover:underline"
+                            className="text-xs text-slate-600 dark:text-slate-300 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9900]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded"
                           >
                             Remove
                           </button>
@@ -674,14 +699,14 @@ function PhdPageInner() {
                       setFilterGroups([createEmptyGroup()]);
                       router.push('/phd?page=1');
                     }}
-                    className="w-full rounded-xl border border-white/20 bg-white/60 dark:bg-white/10 px-4 py-2 text-sm font-semibold text-slate-800 dark:text-white"
+                    className="w-full rounded-xl border border-white/20 bg-white/60 dark:bg-white/10 px-4 py-2 text-sm font-semibold text-slate-800 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9900]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
                   >
                     Clear filters
                   </button>
                   <button
                     type="button"
                     onClick={() => setFilterOpen(false)}
-                    className="w-full rounded-xl bg-[#FF5A1F] hover:bg-[#e14b1c] px-4 py-2 text-sm font-semibold text-white transition-colors"
+                    className="w-full rounded-xl bg-[#FF5A1F] hover:bg-[#e14b1c] px-4 py-2 text-sm font-semibold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9900]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
                   >
                     Show results ({filtered.length})
                   </button>

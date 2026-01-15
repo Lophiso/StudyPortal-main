@@ -1,15 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { GraduationCap, User } from 'lucide-react';
+import { GraduationCap, Moon, Sun, User } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { useAuth } from '../lib/auth';
 
 export default function NavbarNext() {
   const router = useRouter();
   const { user, profile, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const initials =
     profile?.full_name
@@ -54,10 +61,23 @@ export default function NavbarNext() {
               Contact
             </Link>
 
+            <button
+              type="button"
+              onClick={() => setTheme((resolvedTheme ?? 'light') === 'dark' ? 'light' : 'dark')}
+              aria-label="Toggle theme"
+              className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-white/10 hover:bg-white/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#002147]"
+            >
+              {mounted && (resolvedTheme ?? 'light') === 'dark' ? (
+                <Sun className="h-5 w-5" />
+              ) : (
+                <Moon className="h-5 w-5" />
+              )}
+            </button>
+
             {!user ? (
               <Link
                 href="/auth"
-                className="bg-white text-[#002147] font-semibold py-2 px-4 rounded-lg hover:bg-gray-100 transition-colors"
+                className="bg-white text-[#002147] font-semibold py-2 px-4 rounded-lg hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#002147]"
               >
                 Sign In
               </Link>
@@ -66,7 +86,7 @@ export default function NavbarNext() {
                 <button
                   type="button"
                   onClick={() => setMenuOpen((open) => !open)}
-                  className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-[#002147] font-semibold overflow-hidden"
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-[#002147] font-semibold overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#002147]"
                 >
                   {profile?.avatar_url ? (
                     <img

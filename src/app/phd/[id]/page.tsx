@@ -242,7 +242,7 @@ export default function PhdDetailPage() {
         <button
           type="button"
           onClick={() => router.back()}
-          className="mb-4 text-xs text-[#002147] hover:underline"
+          className="mb-4 text-xs text-[#002147] dark:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9900]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded"
         >
           ← Back to PhD Positions
         </button>
@@ -292,7 +292,7 @@ export default function PhdDetailPage() {
                       href={job.applicationLink}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-2 text-xs font-semibold text-[#002147] dark:text-white hover:underline"
+                      className="inline-flex items-center gap-2 text-xs font-semibold text-[#002147] dark:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9900]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded"
                     >
                       Source <ExternalLink className="h-3.5 w-3.5" />
                     </a>
@@ -335,7 +335,7 @@ export default function PhdDetailPage() {
                     href={job.applicationLink}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-5 block w-full text-center rounded-2xl border border-white/20 bg-white/20 hover:bg-white/30 text-[#001a35] dark:text-white font-extrabold py-3 transition-colors shadow-[0_12px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl"
+                    className="mt-5 block w-full text-center rounded-2xl border border-white/20 bg-white/20 hover:bg-white/30 text-[#001a35] dark:text-white font-extrabold py-3 transition-colors shadow-[0_12px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9900]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
                     style={{
                       backgroundImage:
                         'linear-gradient(135deg, rgba(255,255,255,0.32), rgba(255,255,255,0.12)), radial-gradient(650px circle at 50% 0%, rgba(255,153,0,0.25), rgba(255,153,0,0) 55%)',
