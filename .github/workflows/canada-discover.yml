@@ -1,0 +1,30 @@
+name: Canada Discover
+
+"on":
+  schedule:
+    - cron: '15 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  canada-discover:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Canada discover cron endpoint
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_BASE_URL" ]; then
+            echo "Missing APP_BASE_URL secret"
+            exit 1
+          fi
+
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Missing CRON_SECRET secret"
+            exit 1
+          fi
+
+          echo "Calling $APP_BASE_URL/api/cron/canada-discover"
+          curl -fsSL -X POST "$APP_BASE_URL/api/cron/canada-discover" \
+            -H "x-cron-secret: $CRON_SECRET"
