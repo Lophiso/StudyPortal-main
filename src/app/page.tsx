@@ -143,23 +143,23 @@ export default function HomePage() {
       <NavbarNext />
 
       <div
-        className="relative bg-cover bg-center min-h-[640px] flex items-center justify-center"
+        className="relative bg-cover bg-center min-h-[calc(100vh-72px)] flex items-center justify-center"
         style={{
           backgroundImage:
             'linear-gradient(rgba(3, 10, 24, 0.70), rgba(3, 10, 24, 0.80)), url(https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=1600)',
         }}
       >
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <h1 className="text-[clamp(2.35rem,5vw,4rem)] font-extrabold text-white mb-4 leading-[1.05] tracking-tight">
+        <div className="max-w-5xl mx-auto px-4 text-center">
+          <h1 className="text-[clamp(2.55rem,6vw,5.25rem)] font-extrabold text-white mb-4 leading-[1.02] tracking-tight">
             {greetingTitle}
           </h1>
-          <p className="text-[clamp(1rem,1.8vw,1.25rem)] text-slate-200 mb-10 max-w-3xl mx-auto">
+          <p className="text-[clamp(1.05rem,2.1vw,1.55rem)] text-slate-200 mb-10 max-w-3xl mx-auto">
             {greetingSub}
           </p>
 
           <form
             onSubmit={handleSearch}
-            className="rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl shadow-2xl p-6 md:p-7"
+            className="rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl shadow-2xl p-6 md:p-8"
           >
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
               <div className="md:col-span-6">
@@ -170,7 +170,7 @@ export default function HomePage() {
                     placeholder="Search programs, universities..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/10 text-white placeholder:text-white/60 border border-white/20 focus:ring-2 focus:ring-white/40 focus:border-transparent outline-none"
+                    className="w-full pl-10 pr-4 py-[clamp(0.8rem,1.2vw,1.0rem)] rounded-xl bg-white/10 text-white placeholder:text-white/60 border border-white/20 focus:ring-2 focus:ring-white/40 focus:border-transparent outline-none text-[clamp(0.95rem,1.05vw,1.05rem)]"
                   />
                 </div>
               </div>
@@ -179,7 +179,7 @@ export default function HomePage() {
                 <select
                   value={selectedCountry}
                   onChange={(e) => setSelectedCountry(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-white/10 text-white border border-white/20 focus:ring-2 focus:ring-white/40 focus:border-transparent outline-none"
+                  className="w-full px-4 py-[clamp(0.8rem,1.2vw,1.0rem)] rounded-xl bg-white/10 text-white border border-white/20 focus:ring-2 focus:ring-white/40 focus:border-transparent outline-none text-[clamp(0.95rem,1.05vw,1.05rem)]"
                 >
                   <option value="">All Countries</option>
                   <option value="Canada">Canada</option>
@@ -194,7 +194,7 @@ export default function HomePage() {
                 <select
                   value={selectedLevel}
                   onChange={(e) => setSelectedLevel(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-white/10 text-white border border-white/20 focus:ring-2 focus:ring-white/40 focus:border-transparent outline-none"
+                  className="w-full px-4 py-[clamp(0.8rem,1.2vw,1.0rem)] rounded-xl bg-white/10 text-white border border-white/20 focus:ring-2 focus:ring-white/40 focus:border-transparent outline-none text-[clamp(0.95rem,1.05vw,1.05rem)]"
                 >
                   <option value="">All Levels</option>
                   <option value="Bachelor">Bachelor</option>
@@ -224,7 +224,7 @@ export default function HomePage() {
 
             <button
               type="submit"
-              className="w-full mt-5 bg-white text-[#001a35] hover:bg-white/90 font-semibold py-3 px-6 rounded-xl transition-colors duration-200 shadow-lg"
+              className="w-full mt-5 bg-white text-[#001a35] hover:bg-white/90 font-semibold py-[clamp(0.85rem,1.25vw,1.1rem)] px-6 rounded-xl transition-colors duration-200 shadow-lg text-[clamp(0.95rem,1.05vw,1.1rem)]"
             >
               Search Programs
             </button>
