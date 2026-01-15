@@ -101,6 +101,7 @@ export type Database = {
         Row: {
           id: string;
           createdAt: string;
+          card_summary: string;
           department: string;
           funding_status: string;
           full_title: string;
@@ -121,6 +122,7 @@ export type Database = {
         Insert: {
           id?: string;
           createdAt?: string;
+          card_summary: string;
           department: string;
           funding_status: string;
           full_title: string;
@@ -141,6 +143,7 @@ export type Database = {
         Update: {
           id?: string;
           createdAt?: string;
+          card_summary?: string;
           department?: string;
           funding_status?: string;
           full_title?: string;

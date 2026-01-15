@@ -434,7 +434,11 @@ function PhdResults({
                   <div
                     className="text-sm text-gray-700 overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]"
                   >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.description}</ReactMarkdown>
+                    {job.card_summary && job.card_summary !== 'TBA' ? (
+                      job.card_summary
+                    ) : (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.description}</ReactMarkdown>
+                    )}
                   </div>
                 </div>
 

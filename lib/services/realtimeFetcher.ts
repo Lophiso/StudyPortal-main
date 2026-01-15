@@ -61,12 +61,15 @@ interface FeedItem {
 interface GeminiEnriched {
   title: string | null;
   full_title: string | null;
+  card_summary: string | null;
+  university: string | null;
   department: string | null;
   funding_status: string | null;
   city: string | null;
   country: string | null;
   requirements: string[];
   deadline: string | null;
+  posted_date: string | null;
   isPhD: boolean;
   language: string | null;
   summaryEn: string | null;
@@ -74,7 +77,76 @@ interface GeminiEnriched {
 
 function isBlockedContent(text: string) {
   const haystack = text.toLowerCase();
-  return haystack.includes('cloudflare') || haystack.includes('access denied') || haystack.includes('blocked');
+  return (
+    haystack.includes('cloudflare') ||
+    haystack.includes('security check') ||
+    haystack.includes('access denied') ||
+    haystack.includes('blocked')
+  );
+}
+
+function looksLikeHtmlGarbage(text: string) {
+  const t = text.toLowerCase();
+  if (t.includes('<html') || t.includes('<body') || t.includes('<div') || t.includes('</a>')) return true;
+  if (t.includes('&nbsp;') || t.includes('&amp;') || t.includes('&#')) return true;
+  return false;
+}
+
+function hasTooManyNonAscii(text: string) {
+  if (!text) return false;
+  const total = text.length;
+  if (total < 50) return false;
+  let nonAscii = 0;
+  for (const ch of text) {
+    if (ch.charCodeAt(0) > 127) nonAscii += 1;
+  }
+  return nonAscii / total > 0.08;
+}
+
+function clampWords(text: string, maxWords: number) {
+  const words = text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean);
+  return words.slice(0, maxWords).join(' ');
+}
+
+function sanitizeCardSummary(raw: string) {
+  const cleaned = raw
+    .replace(/\s+/g, ' ')
+    .replace(/\b(apply here|apply now|click here|read more|learn more|visit)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned) return 'TBA';
+  return clampWords(cleaned, 15);
+}
+
+function inferUniversityFromUrl(url: string) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    if (host.includes('jobs.ac.uk')) return 'Various Universities';
+    const parts = host.split('.').filter(Boolean);
+    if (parts.length >= 2) {
+      const root = parts[parts.length - 2];
+      return root.toUpperCase();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function inferUniversityFromEmail(text: string) {
+  const m = text.match(/[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})/i);
+  if (!m) return null;
+  const domain = m[1].toLowerCase();
+  const parts = domain.split('.').filter(Boolean);
+  if (parts.length < 2) return null;
+  const root = parts[parts.length - 2];
+  if (root === 'edu' && parts.length >= 3) return parts[parts.length - 3].toUpperCase();
+  return root.toUpperCase();
 }
 
 function truncateTitle(title: string) {
@@ -419,12 +491,15 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
             properties: {
               title: { type: SchemaType.STRING, nullable: true },
               full_title: { type: SchemaType.STRING, nullable: true },
+              card_summary: { type: SchemaType.STRING, nullable: true },
+              university: { type: SchemaType.STRING, nullable: true },
               department: { type: SchemaType.STRING, nullable: true },
               funding_status: { type: SchemaType.STRING, nullable: true },
               city: { type: SchemaType.STRING, nullable: true },
               country: { type: SchemaType.STRING, nullable: true },
               isPhD: { type: SchemaType.BOOLEAN },
               deadline: { type: SchemaType.STRING, nullable: true },
+              posted_date: { type: SchemaType.STRING, nullable: true },
               requirements: {
                 type: SchemaType.ARRAY,
                 items: { type: SchemaType.STRING },
@@ -504,18 +579,23 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
         try {
           const prompt = `You are enriching job and PhD opportunity posts for a database.
 Analyze the following text and:
-0) Produce a professional, shortened title (max 60 characters).
+0) Rewrite the job title to be human-friendly, professional, and under 60 characters.
+   Example: "PhD in Quantum Computing - MIT".
    - Preserve the original (full) title separately as full_title.
 1) Detect the main language (ISO 639-1 code if possible).
 2) Provide a concise English Markdown summary (3-5 sentences + 3-5 bullet points).
-3) Return a JSON object with fields:
+3) Produce a card_summary: a 15-word hook describing the research goal (no generic "Apply" text).
+4) Return a JSON object with fields:
    - title: string (max 60 characters)
    - full_title: string (original full title)
+   - card_summary: string (15 words)
+   - university: string (the institution/university name; do not return TBA unless truly missing)
    - department: string (e.g., "Computer Science"; use "TBA" if missing)
    - funding_status: string (e.g., "Fully Funded"; use "TBA" if missing)
    - city: string | null
    - country: string | null
    - isPhD: boolean (true if this is clearly a PhD/doctoral opportunity)
+   - posted_date: YYYY-MM-DD string or null
    - deadline: YYYY-MM-DD string or null
    - requirements: string[] (short bullet-style requirement sentences)
    - language: string | null (language code or name)
@@ -524,6 +604,9 @@ Analyze the following text and:
 Important rules:
 - Never return the literal string "Unknown" for any field.
 - If a value is not present, return "TBA" (or null only where the schema explicitly allows null).
+- If university is missing, infer it from:
+  - the source domain in the URL
+  - or an email address domain in the footer/contact section.
 
 Text:
 Source title: ${item.title}
@@ -540,12 +623,15 @@ ${contentMarkdown}`;
             enriched = {
               title: parsed.title ?? null,
               full_title: parsed.full_title ?? null,
+              card_summary: parsed.card_summary ?? null,
+              university: parsed.university ?? null,
               department: parsed.department ?? null,
               funding_status: parsed.funding_status ?? null,
               city: parsed.city ?? null,
               country: parsed.country ?? null,
               isPhD: Boolean(parsed.isPhD),
               deadline: parsed.deadline ?? null,
+              posted_date: parsed.posted_date ?? null,
               requirements: Array.isArray(parsed.requirements) ? parsed.requirements : [],
               language: parsed.language ?? null,
               summaryEn: parsed.summaryEn ?? null,
@@ -563,12 +649,15 @@ ${contentMarkdown}`;
         enriched = {
           title: null,
           full_title: null,
+          card_summary: null,
+          university: null,
           department: null,
           funding_status: null,
           city: null,
           country: null,
           isPhD,
           deadline: null,
+          posted_date: null,
           requirements: ['See full description for details.'],
           language: null,
           summaryEn: null,
@@ -581,6 +670,28 @@ ${contentMarkdown}`;
       const cleanedTitle = enriched.title ? truncateTitle(enriched.title) : truncateTitle(fullTitle);
       const department = (enriched.department ?? '').toString().trim() || 'TBA';
       const fundingStatus = (enriched.funding_status ?? '').toString().trim() || 'TBA';
+
+      const inferredUniversity =
+        (enriched.university ?? '').toString().trim() ||
+        inferUniversityFromEmail(contentMarkdown) ||
+        inferUniversityFromUrl(item.link) ||
+        'TBA';
+
+      const companyLabel = item.source.includes('weworkremotely.com') ? 'We Work Remotely' : inferredUniversity;
+
+      const cardSummary = sanitizeCardSummary(
+        (enriched.card_summary ?? '').toString().trim() || (enriched.summaryEn ?? '').toString().trim(),
+      );
+
+      if (looksLikeHtmlGarbage(enriched.summaryEn ?? '') || looksLikeHtmlGarbage(cardSummary)) {
+        skipped.push({ link: item.link, reason: 'rubbish_html_summary' });
+        return;
+      }
+
+      if (hasTooManyNonAscii(enriched.summaryEn ?? '') || hasTooManyNonAscii(cardSummary)) {
+        skipped.push({ link: item.link, reason: 'non_english_summary' });
+        return;
+      }
       const requirements = enriched.requirements && enriched.requirements.length > 0
         ? enriched.requirements
         : ['See full description for details.'];
@@ -606,19 +717,21 @@ ${contentMarkdown}`;
         skipped.push({ link: item.link, reason: 'expired_deadline' });
         return;
       }
-      const postedAtIso = item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString();
+      const postedIsoDate = normalizeDeadline(enriched.posted_date);
+      const postedAtIso = postedIsoDate
+        ? new Date(`${postedIsoDate}T00:00:00.000Z`).toISOString()
+        : item.pubDate
+          ? new Date(item.pubDate).toISOString()
+          : new Date().toISOString();
 
       const payload: Database['public']['Tables']['JobOpportunity']['Insert'] = {
+        card_summary: cardSummary,
         department,
         funding_status: fundingStatus,
         full_title: fullTitle,
         title: cleanedTitle,
         type,
-        company: item.source.includes('weworkremotely.com')
-          ? 'We Work Remotely'
-          : item.source.includes('timeshighereducation.com') || item.source.includes('findaphd.com')
-          ? 'Various Universities'
-          : 'TBA',
+        company: companyLabel,
         country: country || 'TBA',
         city: city || 'TBA',
         description: enriched.summaryEn ?? contentMarkdown,
