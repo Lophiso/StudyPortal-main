@@ -24,6 +24,63 @@ interface RawResult {
   snippet: string;
 }
 
+function toIsoDateString(date: Date) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function normalizeDeadline(raw: string | null | undefined) {
+  if (!raw) return null;
+  const s = raw.toString().trim();
+  if (!s) return null;
+
+  const iso = s.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1];
+  if (iso) return iso;
+
+  const parsed = new Date(s);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  return toIsoDateString(parsed);
+}
+
+function extractDeadlineFromText(text: string) {
+  const iso = text.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1];
+  if (iso) return iso;
+
+  const monthMap: Record<string, number> = {
+    january: 0,
+    february: 1,
+    march: 2,
+    april: 3,
+    may: 4,
+    june: 5,
+    july: 6,
+    august: 7,
+    september: 8,
+    october: 9,
+    november: 10,
+    december: 11,
+  };
+
+  const t = text.toLowerCase();
+  const ctx = t.match(/(deadline|closing date|apply by|applications close|application deadline)[^\n]{0,140}/)?.[0];
+  const scope = ctx ?? t;
+
+  const m1 = scope.match(
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?[,]?\s+(\d{4})\b/,
+  );
+  if (m1) {
+    const month = monthMap[m1[1]];
+    const day = Number(m1[2]);
+    const year = Number(m1[3]);
+    const d = new Date(Date.UTC(year, month, day));
+    if (Number.isFinite(d.getTime())) return toIsoDateString(d);
+  }
+
+  return null;
+}
+
 async function huntWithTavily(query: string, type: HunterType, queryTag: string): Promise<RawResult[]> {
   console.log('[aiHunter] Tavily search', { query, type, queryTag });
 
@@ -78,6 +135,13 @@ function dedupeByUrl(items: RawResult[]): RawResult[] {
 async function upsertFromResult(result: RawResult) {
   const isPhdType = result.type === 'PHD';
 
+  const combinedText = `${result.title}\n${result.snippet}`;
+  const deadline = normalizeDeadline(result.snippet) ?? extractDeadlineFromText(combinedText);
+  if (!deadline) {
+    console.log('[aiHunter] skipping (no deadline found)', result.url);
+    return;
+  }
+
   const payload: any = {
     title: result.title,
     type: isPhdType ? 'PHD' : 'JOB',
@@ -86,7 +150,7 @@ async function upsertFromResult(result: RawResult) {
     city: 'Unknown',
     description: result.snippet || null,
     requirements: ['See full description for details.'],
-    deadline: null,
+    deadline,
     postedAt: new Date().toISOString(),
     applicationLink: result.url,
     source: `TAVILY_${result.queryTag}`,

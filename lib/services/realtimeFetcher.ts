@@ -567,12 +567,14 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
     : null;
 
   // First, check Supabase for existing links to avoid unnecessary Gemini calls
-  const newItems: FeedItem[] = [];
+  // If an existing row has no deadline, we re-process it to try to backfill the deadline.
+  type PendingItem = { item: FeedItem; skipAi: boolean };
+  const newItems: PendingItem[] = [];
 
   for (const item of items) {
     const { data: existing, error: existingError } = await supabase
       .from('JobOpportunity')
-      .select('id')
+      .select('id, deadline')
       .eq('applicationLink', item.link)
       .limit(1);
 
@@ -582,25 +584,34 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
     }
 
     if (existing && existing.length > 0) {
-      // Already in DB, mark as updated but skip Gemini to save latency and cost
-      results.push({ link: item.link, status: 'updated' });
+      const row = existing[0] as { id: string; deadline?: string | null };
+      const deadline = (row.deadline ?? '').toString().trim();
+      const isMissing = !deadline || deadline.toLowerCase() === 'tba' || deadline.toLowerCase() === 'unknown';
+      if (!isMissing) {
+        // Already in DB with a deadline
+        results.push({ link: item.link, status: 'updated' });
+        continue;
+      }
+
+      // Existing row has no deadline; attempt a backfill without Gemini.
+      newItems.push({ item, skipAi: true });
       continue;
     }
 
-    newItems.push(item);
+    newItems.push({ item, skipAi: false });
   }
 
   const MAX_AI_ITEMS = 15;
   const limitedNewItems = newItems.slice(0, MAX_AI_ITEMS);
 
-  console.log('[realtimeFetcher] new items requiring AI:', newItems.length);
+  console.log('[realtimeFetcher] new items requiring enrichment/backfill:', newItems.length);
   if (newItems.length > limitedNewItems.length) {
     console.log('[realtimeFetcher] limiting AI enrichment to', limitedNewItems.length, 'items');
   }
 
   const BATCH_SIZE = 3;
 
-  const processItem = async (item: FeedItem) => {
+  const processItem = async ({ item, skipAi }: PendingItem) => {
     try {
       let enriched: GeminiEnriched | null = null;
 
@@ -642,7 +653,7 @@ export async function runRealtimeIngestion(options?: { includeIndustry?: boolean
         contentMarkdown = contentMarkdown.slice(0, MAX_MARKDOWN_CHARS);
       }
 
-      if (model) {
+      if (model && !skipAi) {
         try {
           const prompt = `You are enriching job and PhD opportunity posts for a database.
 Analyze the following text and:
@@ -831,7 +842,7 @@ ${contentMarkdown}`;
         return;
       }
 
-      results.push({ link: item.link, status: 'created' });
+      results.push({ link: item.link, status: skipAi ? 'updated' : 'created' });
     } catch (e: any) {
       skipped.push({ link: item.link, reason: 'ai_or_upsert_error', detail: e?.message ?? String(e) });
     }
@@ -839,7 +850,7 @@ ${contentMarkdown}`;
 
   for (let i = 0; i < limitedNewItems.length; i += BATCH_SIZE) {
     const batch = limitedNewItems.slice(i, i + BATCH_SIZE);
-    await Promise.all(batch.map((item) => processItem(item)));
+    await Promise.all(batch.map((pending) => processItem(pending)));
   }
 
   return { results, skipped };

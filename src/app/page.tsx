@@ -85,7 +85,7 @@ export default function HomePage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('');
-  const [selectedLevel, setSelectedLevel] = useState('');
+  const [selectedFunding, setSelectedFunding] = useState('');
   const [homeContext, setHomeContext] = useState<HomeContext | null>(null);
   const [trendingTerms, setTrendingTerms] = useState<string[]>([]);
 
@@ -100,6 +100,8 @@ export default function HomePage() {
       const { data, error: supabaseError } = await supabase
         .from('JobOpportunity')
         .select('title')
+        .or('type.eq.PHD,isPhd.eq.true')
+        .not('deadline', 'is', null)
         .order('postedAt', { ascending: false })
         .limit(200);
 
@@ -134,8 +136,8 @@ export default function HomePage() {
     const params = new URLSearchParams();
     if (searchQuery) params.set('q', searchQuery);
     if (selectedCountry) params.set('country', selectedCountry);
-    if (selectedLevel) params.set('level', selectedLevel);
-    router.push(`/search?${params.toString()}`);
+    if (selectedFunding) params.set('funding', selectedFunding);
+    router.push(`/phd?${params.toString()}`);
   };
 
   return (
@@ -167,7 +169,7 @@ export default function HomePage() {
                   <Search className="absolute left-3 top-3.5 h-5 w-5 text-white/60" />
                   <input
                     type="text"
-                    placeholder="Search programs, universities..."
+                    placeholder="Search PhD positions, universities..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-[clamp(0.8rem,1.2vw,1.0rem)] rounded-xl bg-white/10 text-white placeholder:text-white/60 border border-white/20 focus:ring-2 focus:ring-white/40 focus:border-transparent outline-none text-[clamp(0.95rem,1.05vw,1.05rem)]"
@@ -192,14 +194,15 @@ export default function HomePage() {
 
               <div className="md:col-span-3">
                 <select
-                  value={selectedLevel}
-                  onChange={(e) => setSelectedLevel(e.target.value)}
+                  value={selectedFunding}
+                  onChange={(e) => setSelectedFunding(e.target.value)}
                   className="w-full px-4 py-[clamp(0.8rem,1.2vw,1.0rem)] rounded-xl bg-white/10 text-white border border-white/20 focus:ring-2 focus:ring-white/40 focus:border-transparent outline-none text-[clamp(0.95rem,1.05vw,1.05rem)]"
                 >
-                  <option value="">All Levels</option>
-                  <option value="Bachelor">Bachelor</option>
-                  <option value="Master">Master</option>
-                  <option value="PhD">PhD</option>
+                  <option value="">All Funding</option>
+                  <option value="Fully Funded">Fully Funded</option>
+                  <option value="Partially Funded">Partially Funded</option>
+                  <option value="Self-Funded">Self-Funded</option>
+                  <option value="TBA">TBA</option>
                 </select>
               </div>
             </div>
@@ -226,7 +229,7 @@ export default function HomePage() {
               type="submit"
               className="w-full mt-5 bg-white text-[#001a35] hover:bg-white/90 font-semibold py-[clamp(0.85rem,1.25vw,1.1rem)] px-6 rounded-xl transition-colors duration-200 shadow-lg text-[clamp(0.95rem,1.05vw,1.1rem)]"
             >
-              Search Programs
+              Search PhD Positions
             </button>
           </form>
         </div>

@@ -173,6 +173,21 @@ function PhdPageInner() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterGroups, setFilterGroups] = useState<FilterGroup[]>([createEmptyGroup()]);
 
+  useEffect(() => {
+    const q = (searchParams.get('q') ?? '').toString();
+    if (q) setQuery(q);
+
+    const country = (searchParams.get('country') ?? '').toString().trim();
+    const funding = (searchParams.get('funding') ?? '').toString().trim();
+    if (country || funding) {
+      const g = createEmptyGroup();
+      if (country) g.countries = [country];
+      if (funding) g.funding = [funding];
+      setFilterGroups([g]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const currentPage = useMemo(() => {
     const raw = searchParams.get('page');
     const parsed = raw ? Number(raw) : 1;
@@ -198,6 +213,7 @@ function PhdPageInner() {
         .from('JobOpportunity')
         .select('*')
         .or('type.eq.PHD,isPhd.eq.true')
+        .not('deadline', 'is', null)
         .order('postedAt', { ascending: false })
         .limit(500);
 
@@ -205,7 +221,8 @@ function PhdPageInner() {
         console.error('Failed to load PhD positions', error);
         setError('Failed to load PhD positions. Please try again later.');
       } else {
-        setJobs((data as JobOpportunity[]) || []);
+        const list = ((data as JobOpportunity[]) || []).filter((job) => job.deadline && !isTba(job.deadline));
+        setJobs(list);
       }
 
       setLoading(false);
@@ -244,7 +261,9 @@ function PhdPageInner() {
 
   const goToPage = (page: number, totalPages: number) => {
     const next = Math.min(Math.max(page, 1), totalPages);
-    router.push(`/phd?page=${next}`);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', String(next));
+    router.push(`/phd?${params.toString()}`);
   };
 
   const availableCountries = useMemo(() => {
@@ -488,7 +507,7 @@ function PhdPageInner() {
                         </span>
                       )}
                       <span className="px-2.5 py-1 rounded-full bg-white/60 dark:bg-white/10 border border-white/20 text-xs font-semibold text-[#002147] dark:text-white">
-                        Deadline {job.deadline ? new Date(job.deadline).toLocaleDateString() : 'TBD'}
+                        Deadline {job.deadline && !isTba(job.deadline) ? new Date(job.deadline).toLocaleDateString() : 'TBD'}
                       </span>
                     </div>
                   </div>
