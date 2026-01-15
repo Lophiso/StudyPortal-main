@@ -213,7 +213,6 @@ function PhdPageInner() {
         .from('JobOpportunity')
         .select('*')
         .or('type.eq.PHD,isPhd.eq.true')
-        .not('deadline', 'is', null)
         .order('postedAt', { ascending: false })
         .limit(500);
 
@@ -221,8 +220,7 @@ function PhdPageInner() {
         console.error('Failed to load PhD positions', error);
         setError('Failed to load PhD positions. Please try again later.');
       } else {
-        const list = ((data as JobOpportunity[]) || []).filter((job) => job.deadline && !isTba(job.deadline));
-        setJobs(list);
+        setJobs((data as JobOpportunity[]) || []);
       }
 
       setLoading(false);

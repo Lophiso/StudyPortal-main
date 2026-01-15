@@ -137,10 +137,6 @@ async function upsertFromResult(result: RawResult) {
 
   const combinedText = `${result.title}\n${result.snippet}`;
   const deadline = normalizeDeadline(result.snippet) ?? extractDeadlineFromText(combinedText);
-  if (!deadline) {
-    console.log('[aiHunter] skipping (no deadline found)', result.url);
-    return;
-  }
 
   const payload: any = {
     title: result.title,
@@ -150,7 +146,7 @@ async function upsertFromResult(result: RawResult) {
     city: 'Unknown',
     description: result.snippet || null,
     requirements: ['See full description for details.'],
-    deadline,
+    deadline: deadline ?? null,
     postedAt: new Date().toISOString(),
     applicationLink: result.url,
     source: `TAVILY_${result.queryTag}`,

@@ -794,20 +794,17 @@ ${contentMarkdown}`;
         return;
       }
       const today = toIsoDateString(new Date());
-      const deadline =
+      const deadlineCandidate =
         normalizeDeadline(enriched.deadline) ??
         extractDeadlineFromText(contentMarkdown) ??
         extractDeadlineFromText(item.description);
 
-      if (!deadline) {
-        skipped.push({ link: item.link, reason: 'missing_deadline' });
-        return;
-      }
-
-      if (deadline < today) {
+      if (deadlineCandidate && deadlineCandidate < today) {
         skipped.push({ link: item.link, reason: 'expired_deadline' });
         return;
       }
+
+      const deadline = deadlineCandidate ?? null;
       const postedIsoDate = normalizeDeadline(enriched.posted_date);
       const postedAtIso = postedIsoDate
         ? new Date(`${postedIsoDate}T00:00:00.000Z`).toISOString()

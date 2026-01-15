@@ -101,7 +101,6 @@ export default function HomePage() {
         .from('JobOpportunity')
         .select('title')
         .or('type.eq.PHD,isPhd.eq.true')
-        .not('deadline', 'is', null)
         .order('postedAt', { ascending: false })
         .limit(200);
 
