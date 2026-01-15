@@ -51,12 +51,12 @@ EXCEPTION
 END $$;
 
 DO $$ BEGIN
-  CREATE FUNCTION set_updated_at() RETURNS trigger AS $$
+  CREATE FUNCTION set_updated_at() RETURNS trigger AS $set_updated_at$
   BEGIN
     NEW.updated_at = now();
     RETURN NEW;
   END;
-  $$ LANGUAGE plpgsql;
+  $set_updated_at$ LANGUAGE plpgsql;
 EXCEPTION
   WHEN duplicate_function THEN NULL;
 END $$;
